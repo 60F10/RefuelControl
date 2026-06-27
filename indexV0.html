@@ -15,29 +15,25 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,sans-serif;padding:16px 16px 48px;}
-  h1{font-size:1.3rem;margin:10px 0 25px 20px;letter-spacing:.5px;}
+  h1{font-size:1.3rem;margin:4px 0 16px;letter-spacing:.5px;}
   h1 span{color:var(--glp);text-shadow:0 0 8px var(--glp);}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;}
-  label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:10px;}
+  label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:6px;}
   input[type=number]{width:100%;background:#0E0E0E;border:1px solid var(--border);color:var(--text);
     padding:12px;border-radius:10px;font-size:1rem;margin-bottom:14px;}
   .camera-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
     background:#0E0E0E;border:1px dashed var(--g98);color:var(--g98);padding:14px;border-radius:10px;
-    font-size:.95rem;cursor:pointer;margin-bottom:14px;box-shadow:0 0 10px rgba(0,255,255,.35);}
-  .camera-btn.has-img{border-style:solid;color:var(--glp);border-color:var(--glp);box-shadow:0 0 10px rgba(40,242,2,.4);}
+    font-size:.95rem;cursor:pointer;margin-bottom:14px;}
+  .camera-btn.has-img{border-style:solid;color:var(--glp);border-color:var(--glp);}
   #preview{max-width:100%;border-radius:10px;margin-bottom:14px;display:none;}
   .submit-btn{width:100%;background:linear-gradient(90deg,var(--glp),var(--g98));border:none;color:#000;
-    font-weight:600;padding:14px;border-radius:10px;font-size:1rem;cursor:pointer;
-    box-shadow:0 0 14px rgba(40,242,2,.45),0 0 22px rgba(0,255,255,.3);}
-  .submit-btn:disabled{opacity:.5;box-shadow:none;}
+    font-weight:600;padding:14px;border-radius:10px;font-size:1rem;cursor:pointer;}
+  .submit-btn:disabled{opacity:.5;}
   #status{margin-top:10px;font-size:.85rem;color:var(--muted);min-height:1.2em;}
   canvas{max-width:100%;}
   .refresh{float:right;background:none;border:1px solid var(--border);color:var(--muted);
     padding:6px 10px;border-radius:8px;font-size:.75rem;cursor:pointer;}
   h2{font-size:1rem;margin:0 0 12px;color:var(--muted);font-weight:500;}
-  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:.8rem;}
-  .legend-item{display:flex;align-items:center;gap:6px;color:#FFFFFF;}
-  .legend-swatch{width:12px;height:12px;border-radius:3px;display:inline-block;}
 </style>
 </head>
 <body>
@@ -50,7 +46,7 @@
 
   <label>Foto del ticket</label>
   <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none">
-  <button class="camera-btn" id="camBtn">Escanear ticket</button>
+  <button class="camera-btn" id="camBtn">📷 Escanear ticket</button>
   <img id="preview">
 
   <button class="submit-btn" id="submitBtn">Registrar repostaje</button>
@@ -59,19 +55,16 @@
 
 <div class="card">
   <h2>Inversión por combustible <button class="refresh" id="refreshBtn">Actualizar ↻</button></h2>
-  <div class="legend" id="legendQuesito"></div>
-  <canvas id="chartQuesito" height="180"></canvas>
+  <canvas id="chartQuesito" height="220"></canvas>
 </div>
 
 <div class="card">
   <h2>Coste por KM (€/km)</h2>
-  <div class="legend" id="legendCoste"></div>
   <canvas id="chartCoste" height="220"></canvas>
 </div>
 
 <div class="card">
   <h2>Precio por litro (€)</h2>
-  <div class="legend" id="legendPrecio"></div>
   <canvas id="chartPrecio" height="220"></canvas>
 </div>
 
@@ -82,31 +75,6 @@ const TOKEN = "Redondas";
 
 const COLORES = { "GLP": "#28f202", "Gasolina 98": "#00FFFF", "Gasolina 95": "#FF5C00" };
 const colorDe = t => COLORES[t] || "#888";
-
-// ---------- Plugin de Chart.js: glow neón en líneas y quesito ----------
-const neonGlow = {
-  id: 'neonGlow',
-  afterDatasetsDraw(chart) {
-    const ctx = chart.ctx;
-    chart.data.datasets.forEach((ds, i) => {
-      const meta = chart.getDatasetMeta(i);
-      if (meta.hidden) return;
-      ctx.save();
-      ctx.shadowBlur = 12;
-      if (meta.type === 'line' && meta.dataset) {
-        ctx.shadowColor = ds.borderColor;
-        meta.dataset.draw(ctx);          // redibuja la línea encima, con halo
-      } else if (meta.data) {
-        meta.data.forEach(el => {        // arcos del quesito, cada uno con su propio color
-          ctx.shadowColor = el.options.backgroundColor;
-          el.draw(ctx);
-        });
-      }
-      ctx.restore();
-    });
-  }
-};
-Chart.register(neonGlow);
 
 // ---------- Cámara / formulario ----------
 const fileInput = document.getElementById('fileInput');
@@ -200,35 +168,21 @@ function pintarDashboard(data) {
     return;
   }
   const opcionesEjes = {
-    plugins: { legend: { display: false } },
     scales: {
       x: { ticks: { color: '#9A9A9A' }, grid: { color: '#2A2A2A' } },
       y: { ticks: { color: '#9A9A9A' }, grid: { color: '#2A2A2A' } }
-    }
+    },
+    plugins: { legend: { labels: { color: '#FFFFFF' } } }
   };
-
-  function pintarLeyenda(elId, items) {
-    document.getElementById(elId).innerHTML = items.map(it =>
-      `<span class="legend-item"><span class="legend-swatch" style="background:${it.color};box-shadow:0 0 6px ${it.color}"></span>${it.label}</span>`
-    ).join('');
-  }
-
-  pintarLeyenda('legendQuesito', data.quesito.map(q => ({ color: colorDe(q.tipo), label: q.tipo })));
-  pintarLeyenda('legendCoste', data.series.map(s => ({ color: colorDe(s.tipo), label: s.tipo })));
-  pintarLeyenda('legendPrecio', data.series.map(s => ({ color: colorDe(s.tipo), label: s.tipo })));
 
   chQuesito && chQuesito.destroy();
   chQuesito = new Chart(document.getElementById('chartQuesito'), {
     type: 'doughnut',
     data: {
       labels: data.quesito.map(q => q.tipo),
-      datasets: [{
-        data: data.quesito.map(q => q.total),
-        backgroundColor: data.quesito.map(q => colorDe(q.tipo)),
-        borderWidth: 0          // sin borde blanco
-      }]
+      datasets: [{ data: data.quesito.map(q => q.total), backgroundColor: data.quesito.map(q => colorDe(q.tipo)) }]
     },
-    options: { plugins: { legend: { display: false } } }
+    options: { plugins: { legend: { labels: { color: '#FFFFFF' } } } }
   });
 
   chCoste && chCoste.destroy();
@@ -238,18 +192,10 @@ function pintarDashboard(data) {
       labels: data.fechas,
       datasets: data.series.map(s => ({
         label: s.tipo, data: s.costesKM, borderColor: colorDe(s.tipo),
-        backgroundColor: colorDe(s.tipo), borderWidth: 2,
-        pointRadius: 3, pointBackgroundColor: colorDe(s.tipo),
-        tension: .3, spanGaps: true
+        backgroundColor: colorDe(s.tipo), tension: .3, spanGaps: true
       }))
     },
-    options: {
-      ...opcionesEjes,
-      scales: {
-        ...opcionesEjes.scales,
-        y: { ...opcionesEjes.scales.y, grace: '15%' } // margen para que min/max no toquen el borde
-      }
-    }
+    options: opcionesEjes
   });
 
   chPrecio && chPrecio.destroy();
@@ -259,9 +205,7 @@ function pintarDashboard(data) {
       labels: data.fechas,
       datasets: data.series.map(s => ({
         label: s.tipo, data: s.precios, borderColor: colorDe(s.tipo),
-        backgroundColor: colorDe(s.tipo), borderWidth: 2,
-        pointRadius: 3, pointBackgroundColor: colorDe(s.tipo),
-        tension: .3, spanGaps: true
+        backgroundColor: colorDe(s.tipo), tension: .3, spanGaps: true
       }))
     },
     options: opcionesEjes
