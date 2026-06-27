@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Repostajes</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1E1E1E">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#121212; --panel:#1E1E1E; --border:#2A2A2A;
+    --text:#FFFFFF; --muted:#9A9A9A;
+    --glp:#28f202; --g98:#00FFFF; --g95:#FF5C00;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,sans-serif;padding:16px 16px 48px;}
+  h1{font-size:1.3rem;margin:4px 0 16px;letter-spacing:.5px;}
+  h1 span{color:var(--glp);text-shadow:0 0 8px var(--glp);}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;}
+  label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:6px;}
+  input[type=number]{width:100%;background:#0E0E0E;border:1px solid var(--border);color:var(--text);
+    padding:12px;border-radius:10px;font-size:1rem;margin-bottom:14px;}
+  .camera-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    background:#0E0E0E;border:1px dashed var(--g98);color:var(--g98);padding:14px;border-radius:10px;
+    font-size:.95rem;cursor:pointer;margin-bottom:14px;}
+  .camera-btn.has-img{border-style:solid;color:var(--glp);border-color:var(--glp);}
+  #preview{max-width:100%;border-radius:10px;margin-bottom:14px;display:none;}
+  .submit-btn{width:100%;background:linear-gradient(90deg,var(--glp),var(--g98));border:none;color:#000;
+    font-weight:600;padding:14px;border-radius:10px;font-size:1rem;cursor:pointer;}
+  .submit-btn:disabled{opacity:.5;}
+  #status{margin-top:10px;font-size:.85rem;color:var(--muted);min-height:1.2em;}
+  canvas{max-width:100%;}
+  .refresh{float:right;background:none;border:1px solid var(--border);color:var(--muted);
+    padding:6px 10px;border-radius:8px;font-size:.75rem;cursor:pointer;}
+  h2{font-size:1rem;margin:0 0 12px;color:var(--muted);font-weight:500;}
+</style>
+</head>
+<body>
+
+<h1>⛽ Control de <span>Repostajes</span></h1>
+
+<div class="card">
+  <label>KM actuales</label>
+  <input type="number" id="km" placeholder="Ej. 6250">
+
+  <label>Foto del ticket</label>
+  <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none">
+  <button class="camera-btn" id="camBtn">📷 Escanear ticket</button>
+  <img id="preview">
+
+  <button class="submit-btn" id="submitBtn">Registrar repostaje</button>
+  <div id="status"></div>
+</div>
+
+<div class="card">
+  <h2>Inversión por combustible <button class="refresh" id="refreshBtn">Actualizar ↻</button></h2>
+  <canvas id="chartQuesito" height="220"></canvas>
+</div>
+
+<div class="card">
+  <h2>Coste por KM (€/km)</h2>
+  <canvas id="chartCoste" height="220"></canvas>
+</div>
+
+<div class="card">
+  <h2>Precio por litro (€)</h2>
+  <canvas id="chartPrecio" height="220"></canvas>
+</div>
+
+<script>
+// ---------- CONFIG: tu Web App ----------
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwk44aHawhbG-zIAlGBY2iafd4C-ZJnv_oVhKaCsxrf7XwqEqSjE1Lupt9Day_ciRmj/exec";
+const TOKEN = "Redondas";
+
+const COLORES = { "GLP": "#28f202", "Gasolina 98": "#00FFFF", "Gasolina 95": "#FF5C00" };
+const colorDe = t => COLORES[t] || "#888";
+
+// ---------- Cámara / formulario ----------
+const fileInput = document.getElementById('fileInput');
+const camBtn = document.getElementById('camBtn');
+const preview = document.getElementById('preview');
+const submitBtn = document.getElementById('submitBtn');
+const statusEl = document.getElementById('status');
+let base64Img = null, mimeType = null;
+
+camBtn.onclick = () => fileInput.click();
+
+fileInput.onchange = () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  mimeType = file.type;
+  const reader = new FileReader();
+  reader.onload = () => {
+    base64Img = reader.result.split(',')[1];
+    preview.src = reader.result;
+    preview.style.display = 'block';
+    camBtn.textContent = '✅ Ticket cargado (tocar para cambiar)';
+    camBtn.classList.add('has-img');
+  };
+  reader.readAsDataURL(file);
+};
+
+submitBtn.onclick = async () => {
+  const km = document.getElementById('km').value;
+  if (!km || !base64Img) {
+    statusEl.textContent = 'Faltan los KM o la foto del ticket.';
+    return;
+  }
+  submitBtn.disabled = true;
+  statusEl.textContent = 'Analizando ticket con IA...';
+
+  try {
+    const res = await fetch(WEBAPP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight CORS
+      body: JSON.stringify({ token: TOKEN, km, imagenBase64: base64Img, mimeType })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Error desconocido');
+
+    statusEl.textContent = `✅ Registrado ${data.registros.idRecibo}: ` +
+      data.registros.items.map(i => `${i.tipo} ${i.litros}L (${i.total}€)`).join(' + ');
+
+    document.getElementById('km').value = '';
+    preview.style.display = 'none';
+    camBtn.textContent = '📷 Escanear ticket';
+    camBtn.classList.remove('has-img');
+    base64Img = null;
+    cargarDashboard();
+
+  } catch (err) {
+    statusEl.textContent = '❌ ' + err.message;
+  } finally {
+    submitBtn.disabled = false;
+  }
+};
+
+// ---------- Dashboard ----------
+let chQuesito, chCoste, chPrecio;
+
+async function cargarDashboard() {
+  const res = await fetch(`${WEBAPP_URL}?action=dashboard&token=${encodeURIComponent(TOKEN)}`);
+  const data = await res.json();
+  pintarDashboard(data);
+}
+
+function pintarDashboard(data) {
+  const opcionesEjes = {
+    scales: {
+      x: { ticks: { color: '#9A9A9A' }, grid: { color: '#2A2A2A' } },
+      y: { ticks: { color: '#9A9A9A' }, grid: { color: '#2A2A2A' } }
+    },
+    plugins: { legend: { labels: { color: '#FFFFFF' } } }
+  };
+
+  chQuesito && chQuesito.destroy();
+  chQuesito = new Chart(document.getElementById('chartQuesito'), {
+    type: 'doughnut',
+    data: {
+      labels: data.quesito.map(q => q.tipo),
+      datasets: [{ data: data.quesito.map(q => q.total), backgroundColor: data.quesito.map(q => colorDe(q.tipo)) }]
+    },
+    options: { plugins: { legend: { labels: { color: '#FFFFFF' } } } }
+  });
+
+  chCoste && chCoste.destroy();
+  chCoste = new Chart(document.getElementById('chartCoste'), {
+    type: 'line',
+    data: {
+      labels: data.fechas,
+      datasets: data.series.map(s => ({
+        label: s.tipo, data: s.costesKM, borderColor: colorDe(s.tipo),
+        backgroundColor: colorDe(s.tipo), tension: .3, spanGaps: true
+      }))
+    },
+    options: opcionesEjes
+  });
+
+  chPrecio && chPrecio.destroy();
+  chPrecio = new Chart(document.getElementById('chartPrecio'), {
+    type: 'line',
+    data: {
+      labels: data.fechas,
+      datasets: data.series.map(s => ({
+        label: s.tipo, data: s.precios, borderColor: colorDe(s.tipo),
+        backgroundColor: colorDe(s.tipo), tension: .3, spanGaps: true
+      }))
+    },
+    options: opcionesEjes
+  });
+}
+
+document.getElementById('refreshBtn').onclick = cargarDashboard;
+
+cargarDashboard();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
