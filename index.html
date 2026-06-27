@@ -38,7 +38,7 @@
 </head>
 <body>
 
-<h1>⛽ Control de <span>Repostajes</span></h1>
+<h1> Control de <span>Repostajes</span></h1>
 
 <div class="card">
   <label>KM actuales</label>
@@ -140,12 +140,33 @@ submitBtn.onclick = async () => {
 let chQuesito, chCoste, chPrecio;
 
 async function cargarDashboard() {
-  const res = await fetch(`${WEBAPP_URL}?action=dashboard&token=${encodeURIComponent(TOKEN)}`);
-  const data = await res.json();
-  pintarDashboard(data);
+  return new Promise((resolve) => {
+    const cb = 'dashboardCB_' + Date.now();
+    const script = document.createElement('script');
+
+    window[cb] = (data) => {
+      pintarDashboard(data);
+      delete window[cb];
+      script.remove();
+      resolve();
+    };
+    script.onerror = () => {
+      statusEl.textContent = '❌ No se pudo cargar el dashboard (revisa la URL/token).';
+      delete window[cb];
+      script.remove();
+      resolve();
+    };
+
+    script.src = `${WEBAPP_URL}?action=dashboard&token=${encodeURIComponent(TOKEN)}&callback=${cb}`;
+    document.body.appendChild(script);
+  });
 }
 
 function pintarDashboard(data) {
+  if (data.error) {
+    statusEl.textContent = '❌ Dashboard: ' + data.error;
+    return;
+  }
   const opcionesEjes = {
     scales: {
       x: { ticks: { color: '#9A9A9A' }, grid: { color: '#2A2A2A' } },
