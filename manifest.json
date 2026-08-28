@@ -1,12 +1,19 @@
 {
+  "id": "/",
   "name": "Control de Repostajes",
   "short_name": "Repostajes",
+  "description": "Registro de repostajes de un Dacia Sandero Stepway ECO-G bífuel (GLP + gasolina).",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#121212",
   "theme_color": "#1E1E1E",
+  "lang": "es-ES",
+  "categories": ["utilities", "productivity"],
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
