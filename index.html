@@ -6,7 +6,6 @@
 <title>Repostajes</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1E1E1E">
-<!-- iOS: modo standalone y barra de estado oscura -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Repostajes">
@@ -16,7 +15,7 @@
   :root{
     --bg:#121212; --panel:#1E1E1E; --border:#2A2A2A;
     --text:#FFFFFF; --muted:#9A9A9A;
-    --glp:#28f202; --g98:#00FFFF; --g95:#FF5C00; --oro:#FFD166;
+    --glp:#28f202; --g98:#00FFFF; --g95:#FF5C00; --oro:#FFD166; --rojo:#FF6B6B;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{
@@ -31,17 +30,15 @@
   h2{font-size:1rem;margin:0 0 12px;color:var(--muted);font-weight:500;}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;}
   label{display:block;font-size:.78rem;color:var(--muted);margin:0 0 6px;}
-  .hint{font-size:.72rem;color:#6E6E6E;margin:-8px 0 12px;}
+  .hint{font-size:.72rem;color:#6E6E6E;margin:-8px 0 12px;line-height:1.4;}
   input,select{
     width:100%;background:#0E0E0E;border:1px solid var(--border);color:var(--text);
     padding:12px;border-radius:10px;font-size:16px;margin-bottom:12px;font-family:inherit;
   }
   input:focus,select:focus{outline:none;border-color:var(--g98);}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;}
-  .btn{
-    width:100%;border:none;border-radius:10px;padding:14px;font-size:1rem;
-    font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px;
-  }
+  .btn{width:100%;border:none;border-radius:10px;padding:14px;font-size:1rem;
+    font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px;}
   .btn-primary{background:linear-gradient(90deg,var(--glp),var(--g98));color:#000;
     box-shadow:0 0 14px rgba(40,242,2,.45),0 0 22px rgba(0,255,255,.3);}
   .btn-ghost{background:#0E0E0E;border:1px dashed var(--g98);color:var(--g98);font-weight:500;}
@@ -49,28 +46,28 @@
   .btn:disabled{opacity:.45;box-shadow:none;}
   .row-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   #preview{max-width:100%;border-radius:10px;margin-bottom:12px;display:none;}
-  #status{margin-top:6px;font-size:.85rem;color:var(--muted);min-height:1.2em;line-height:1.4;}
-  .aviso{color:#FF6B6B;}
+  #status{margin-top:6px;font-size:.85rem;color:var(--muted);min-height:1.2em;line-height:1.5;}
+  .aviso{color:var(--rojo);}
   .ok{color:var(--glp);}
   canvas{max-width:100%;}
+  /* Cada gráfico manda sobre su alto: así las barras no se estiran ni se salen */
+  .chart-box{position:relative;width:100%;height:240px;}
+  .chart-box.alto{height:270px;}
   .refresh{float:right;background:none;border:1px solid var(--border);color:var(--muted);
     padding:6px 10px;border-radius:8px;font-size:.75rem;cursor:pointer;}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:.78rem;}
   .legend-item{display:flex;align-items:center;gap:6px;}
   .legend-swatch{width:12px;height:12px;border-radius:3px;display:inline-block;}
-  /* KPIs */
   .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
   .kpi{background:#151515;border:1px solid var(--border);border-radius:12px;padding:12px;}
   .kpi .k{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
   .kpi .v{font-size:1.25rem;font-weight:700;margin-top:4px;}
   .kpi .s{font-size:.72rem;color:#6E6E6E;margin-top:2px;}
   .kpi.wide{grid-column:1 / -1;}
-  /* Toggle real / coche */
   .toggle{display:flex;background:#0E0E0E;border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:14px;}
   .toggle button{flex:1;background:none;border:none;color:var(--muted);padding:9px;border-radius:7px;
     font-size:.82rem;cursor:pointer;font-family:inherit;}
   .toggle button.on{background:var(--g98);color:#000;font-weight:600;}
-  /* Revisión del ticket */
   #revision{display:none;}
   .item{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:#151515;}
   .item .cab{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
@@ -83,9 +80,8 @@
 </head>
 <body>
 
-<h1>Control de <span>Repostajes</span></h1>
+<h1>Control de <span>Repostajes</span> V2</h1>
 
-<!-- ============ FORMULARIO ============ -->
 <div class="card">
   <label for="km">KM totales del coche *</label>
   <input type="number" id="km" inputmode="decimal" placeholder="Ej. 4780">
@@ -93,15 +89,15 @@
 
   <div class="grid2">
     <div>
-      <label for="lecGlp">Lectura KM con GLP</label>
+      <label for="lecGlp">Parcial KM con GLP</label>
       <input type="number" id="lecGlp" inputmode="decimal" placeholder="del coche">
     </div>
     <div>
-      <label for="lecGas">Lectura KM con gasolina</label>
+      <label for="lecGas">Parcial KM con gasolina</label>
       <input type="number" id="lecGas" inputmode="decimal" placeholder="del coche">
     </div>
   </div>
-  <div class="hint" id="hintLec"></div>
+  <div class="hint">Los dos parciales desde el último repostaje. Rellénalos siempre, aunque hoy solo repostes uno de los dos combustibles.</div>
 
   <div class="grid2">
     <div>
@@ -118,8 +114,8 @@
   <input type="file" id="inCam" accept="image/*" capture="environment" hidden>
   <input type="file" id="inGal" accept="image/*" hidden>
   <div class="row-btns">
-    <button class="btn btn-ghost" id="btnCam">📷 Hacer foto</button>
-    <button class="btn btn-ghost" id="btnGal">🖼️ Galería</button>
+    <button class="btn btn-ghost" id="btnCam">Hacer foto</button>
+    <button class="btn btn-ghost" id="btnGal">Galería</button>
   </div>
   <img id="preview" alt="Ticket">
 
@@ -127,21 +123,16 @@
   <div id="status"></div>
 </div>
 
-<!-- ============ REVISIÓN ANTES DE GUARDAR ============ -->
 <div class="card" id="revision">
   <h2>Revisa antes de guardar</h2>
-
   <label for="estacion">Estación de servicio</label>
   <input type="text" id="estacion" list="listaEstaciones" placeholder="Ej. E.S. DISA Padre Anchieta">
   <datalist id="listaEstaciones"></datalist>
-
   <div id="items"></div>
-
   <button class="btn btn-primary" id="btnGuardar">Guardar repostaje</button>
   <button class="btn btn-ghost" id="btnCancelar">Descartar</button>
 </div>
 
-<!-- ============ INDICADORES ============ -->
 <div class="card">
   <h2>Resumen <button class="refresh" id="btnRefresh">Actualizar ↻</button></h2>
   <div class="toggle">
@@ -154,50 +145,51 @@
 <div class="card">
   <h2>Inversión por combustible (€)</h2>
   <div class="legend" id="lgInversion"></div>
-  <canvas id="chInversion" height="200"></canvas>
+  <div class="chart-box"><canvas id="chInversion"></canvas></div>
 </div>
 
 <div class="card">
   <h2>Kilómetros por combustible</h2>
   <div class="legend" id="lgKm"></div>
-  <canvas id="chKm" height="200"></canvas>
+  <div class="chart-box"><canvas id="chKm"></canvas></div>
 </div>
 
 <div class="card">
   <h2>Coste por KM (€/km) <span id="modoCoste" style="font-size:.75rem;color:#6E6E6E"></span></h2>
   <div class="legend" id="lgCoste"></div>
-  <canvas id="chCoste" height="220"></canvas>
+  <div class="chart-box"><canvas id="chCoste"></canvas></div>
 </div>
 
 <div class="card">
   <h2>Consumo medio (L/100km) <span id="modoConsumo" style="font-size:.75rem;color:#6E6E6E"></span></h2>
   <div class="legend" id="lgConsumo"></div>
-  <canvas id="chConsumo" height="220"></canvas>
+  <div class="chart-box"><canvas id="chConsumo"></canvas></div>
 </div>
 
 <div class="card">
   <h2>Precio por litro (€)</h2>
   <div class="legend" id="lgPrecio"></div>
-  <canvas id="chPrecio" height="220"></canvas>
+  <div class="chart-box"><canvas id="chPrecio"></canvas></div>
 </div>
 
 <div class="card">
   <h2>Precio medio por estación (€/L)</h2>
-  <canvas id="chEstaciones" height="220"></canvas>
+  <div class="legend" id="lgEstaciones"></div>
+  <div class="chart-box" id="boxEstaciones"><canvas id="chEstaciones"></canvas></div>
 </div>
 
 <div class="card">
   <h2>Gasto mensual (€)</h2>
   <div class="legend" id="lgMes"></div>
-  <canvas id="chMeses" height="220"></canvas>
+  <div class="chart-box alto"><canvas id="chMeses"></canvas></div>
 </div>
 
 <script>
 // ==========================================================
-//  CONFIG
+//  CONFIG — sin secretos. La URL y el token viven en la
+//  función de Netlify, en variables de entorno.
 // ==========================================================
-const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwk44aHawhbG-zIAlGBY2iafd4C-ZJnv_oVhKaCsxrf7XwqEqSjE1Lupt9Day_ciRmj/exec";
-const TOKEN = "Redondas";
+const API = '/api/repostaje';
 
 const COLORES = { "GLP": "#28f202", "Gasolina 98": "#00FFFF", "Gasolina 95": "#FF5C00" };
 const colorDe = t => COLORES[t] || "#8A8A8A";
@@ -207,49 +199,68 @@ const eur = v => (v === null || v === undefined || isNaN(v)) ? '—' : v.toLocal
 const km  = v => (v === null || v === undefined || isNaN(v)) ? '—' : Math.round(v).toLocaleString('es-ES') + ' km';
 const dec = (v,d=2) => (v === null || v === undefined || isNaN(v)) ? '—' : v.toLocaleString('es-ES', {minimumFractionDigits:d, maximumFractionDigits:d});
 
-let MODO = 'real';           // 'real' | 'coche'
+let MODO = 'real';
 let DATOS = { registros: [], estaciones: [] };
-let ANALISIS = null;
+let ANALISIS = null, RECIBO = null;
 let fotoB64 = null, fotoMime = null;
 
 const $ = id => document.getElementById(id);
 const statusEl = $('status');
+const info = (html, clase) => { statusEl.innerHTML = clase ? '<span class="' + clase + '">' + html + '</span>' : html; };
 
 // ==========================================================
-//  Glow neón para Chart.js
+//  Glow neón
 // ==========================================================
 Chart.register({
   id: 'neonGlow',
   afterDatasetsDraw(chart) {
     const ctx = chart.ctx;
+    const a = chart.chartArea;
     chart.data.datasets.forEach((ds, i) => {
       const meta = chart.getDatasetMeta(i);
       if (meta.hidden) return;
       ctx.save();
+      // Recortamos al área del gráfico: sin esto el redibujado se come los ejes
+      if (a) { ctx.beginPath(); ctx.rect(a.left, a.top, a.right - a.left, a.bottom - a.top); ctx.clip(); }
       ctx.shadowBlur = 12;
       if (meta.type === 'line' && meta.dataset) {
         ctx.shadowColor = ds.borderColor;
         meta.dataset.draw(ctx);
       } else if (meta.data) {
-        meta.data.forEach(el => {
-          ctx.shadowColor = el.options.backgroundColor;
-          el.draw(ctx);
-        });
+        meta.data.forEach(el => { ctx.shadowColor = el.options.backgroundColor; el.draw(ctx); });
       }
       ctx.restore();
     });
   }
 });
 
+// Escribe el valor al final de cada barra horizontal
+const etiquetasBarra = {
+  id: 'etiquetasBarra',
+  afterDatasetsDraw(chart, args, opts) {
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.fillStyle = '#E8E8E8';
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    chart.getDatasetMeta(0).data.forEach((el, i) => {
+      const v = chart.data.datasets[0].data[i];
+      if (v === null || v === undefined) return;
+      ctx.fillText((opts.formato || (x => x))(v), el.x + 6, el.y);
+    });
+    ctx.restore();
+  }
+};
+
 // ==========================================================
-//  Cámara — reducimos la foto en el móvil antes de subirla.
+//  Foto: se reduce en el móvil antes de subirla.
 //  Esto además convierte los HEIC del iPhone a JPEG.
 // ==========================================================
-const MAX_LADO = 1600, CALIDAD = 0.82;
+const MAX_LADO = 1400, CALIDAD = 0.75;
 
 function procesarFoto(file) {
   if (!file) return;
-  statusEl.textContent = 'Preparando la foto...';
+  info('Preparando la foto...');
   const reader = new FileReader();
   reader.onload = () => {
     const img = new Image();
@@ -262,14 +273,14 @@ function procesarFoto(file) {
       const dataUrl = cv.toDataURL('image/jpeg', CALIDAD);
       fotoB64 = dataUrl.split(',')[1];
       fotoMime = 'image/jpeg';
+      RECIBO = null;
       $('preview').src = dataUrl;
       $('preview').style.display = 'block';
       $('btnCam').classList.add('ok');
       $('btnGal').classList.add('ok');
-      const kb = Math.round(fotoB64.length * 0.75 / 1024);
-      statusEl.textContent = 'Ticket listo (' + kb + ' KB).';
+      info('Ticket listo (' + Math.round(fotoB64.length * 0.75 / 1024) + ' KB).');
     };
-    img.onerror = () => { statusEl.innerHTML = '<span class="aviso">No se pudo leer esa imagen. Prueba con otra.</span>'; };
+    img.onerror = () => info('No se pudo leer esa imagen. Prueba con otra.', 'aviso');
     img.src = reader.result;
   };
   reader.readAsDataURL(file);
@@ -281,37 +292,60 @@ $('inCam').onchange = e => procesarFoto(e.target.files[0]);
 $('inGal').onchange = e => procesarFoto(e.target.files[0]);
 
 // ==========================================================
-//  Paso 1 — Analizar
+//  Llamadas a la API
 // ==========================================================
-async function postWebApp(payload) {
-  const res = await fetch(WEBAPP_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },  // evita el preflight CORS
-    body: JSON.stringify(Object.assign({ token: TOKEN }, payload))
-  });
-  return res.json();
+/** La API siempre responde JSON. Si llega otra cosa, explicamos por qué. */
+async function leerJSON(res) {
+  const txt = await res.text();
+  try {
+    return JSON.parse(txt);
+  } catch (err) {
+    if (location.protocol === 'file:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      throw new Error('Estás abriendo la app en local. /api solo existe cuando está publicada en Netlify, ' +
+                      'así que el dashboard no puede cargar desde aquí.');
+    }
+    throw new Error('La API no devolvió JSON (HTTP ' + res.status + '): ' + txt.slice(0, 120));
+  }
 }
 
+async function api(payload) {
+  const res = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  return leerJSON(res);
+}
+
+// ==========================================================
+//  Analizar: subir la foto y luego pasarla por Gemini.
+//  Dos llamadas cortas, para no agotar el tiempo de la función.
+// ==========================================================
 $('btnAnalizar').onclick = async () => {
-  if (!$('km').value) { statusEl.innerHTML = '<span class="aviso">Faltan los KM totales.</span>'; return; }
-  if (!fotoB64)       { statusEl.innerHTML = '<span class="aviso">Falta la foto del ticket.</span>'; return; }
+  if (!$('km').value) return info('Faltan los KM totales.', 'aviso');
+  if (!fotoB64)       return info('Falta la foto del ticket.', 'aviso');
 
   $('btnAnalizar').disabled = true;
-  statusEl.textContent = 'Analizando el ticket con Gemini...';
-
   try {
-    const r = await postWebApp({ action: 'analizar', imagenBase64: fotoB64, mimeType: fotoMime });
+    if (!RECIBO) {
+      info('Subiendo la foto a Drive...');
+      const sub = await api({ action: 'subir', imagenBase64: fotoB64, mimeType: fotoMime });
+      RECIBO = sub.ok ? { fileId: sub.fileId, url: sub.url } : null;
+      if (!sub.ok) info('⚠️ La foto no se guardó en Drive: ' + sub.error, 'aviso');
+    }
+
+    info('Analizando el ticket con Gemini...');
+    const r = RECIBO
+      ? await api({ action: 'analizar', fileId: RECIBO.fileId })
+      : await api({ action: 'analizar', imagenBase64: fotoB64, mimeType: fotoMime });
+
     if (!r.ok) throw new Error(r.error || 'Error desconocido');
 
     ANALISIS = r;
-    if (r.recibo && r.recibo.error) {
-      statusEl.innerHTML = '<span class="aviso">⚠️ La foto no se guardó en Drive: ' + r.recibo.error + '</span>';
-    } else {
-      statusEl.innerHTML = '<span class="ok">Ticket analizado. Revisa los datos y guarda.</span>';
-    }
+    info('Ticket analizado. Revisa los datos y guarda.', 'ok');
     pintarRevision(r);
   } catch (err) {
-    statusEl.innerHTML = '<span class="aviso">❌ ' + err.message + '</span>';
+    info('❌ ' + err.message, 'aviso');
   } finally {
     $('btnAnalizar').disabled = false;
   }
@@ -345,19 +379,16 @@ function pintarRevision(r) {
   $('revision').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function borrarItem(i) {
-  ANALISIS.items.splice(i, 1);
-  pintarRevision(ANALISIS);
-}
+function borrarItem(i) { ANALISIS.items.splice(i, 1); pintarRevision(ANALISIS); }
 
 $('btnCancelar').onclick = () => {
   $('revision').style.display = 'none';
   ANALISIS = null;
-  statusEl.textContent = 'Descartado.';
+  info('Descartado.');
 };
 
 // ==========================================================
-//  Paso 2 — Guardar
+//  Guardar
 // ==========================================================
 $('btnGuardar').onclick = async () => {
   const items = [...document.querySelectorAll('#items .item')].map(el => ({
@@ -366,14 +397,13 @@ $('btnGuardar').onclick = async () => {
     precio_litro: parseFloat(el.querySelector('.f-precio').value) || 0,
     total: parseFloat(el.querySelector('.f-total').value) || 0
   }));
-
-  if (!items.length) { statusEl.innerHTML = '<span class="aviso">No queda ningún combustible que guardar.</span>'; return; }
+  if (!items.length) return info('No queda ningún combustible que guardar.', 'aviso');
 
   $('btnGuardar').disabled = true;
-  statusEl.textContent = 'Guardando en el Sheet...';
+  info('Guardando en el Sheet...');
 
   try {
-    const r = await postWebApp({
+    const r = await api({
       action: 'guardar',
       datos: {
         estacion: $('estacion').value.trim(),
@@ -382,54 +412,56 @@ $('btnGuardar').onclick = async () => {
         lecturaGasolina: $('lecGas').value,
         consumoCocheGLP: $('consGlp').value,
         consumoCocheGasolina: $('consGas').value,
-        recibo: ANALISIS ? ANALISIS.recibo : null,
+        recibo: RECIBO,
         items
       }
     });
     if (!r.ok) throw new Error(r.error || 'Error desconocido');
 
-    statusEl.innerHTML = '<span class="ok">✅ ' + r.idRecibo + ': ' +
-      r.items.map(i => i.tipo + ' ' + dec(i.litros) + ' L (' + eur(i.total) + ')').join(' + ') + '</span>' +
-      (r.avisoDrive ? '<br><span class="aviso">⚠️ ' + r.avisoDrive + '</span>' : '');
+    let msg = '<span class="ok">✅ ' + r.idRecibo + ': ' +
+      r.items.map(i => i.tipo + ' ' + dec(i.litros) + ' L (' + eur(i.total) + ')').join(' + ') + '</span>';
+    if (r.avisoDrive) msg += '<br><span class="aviso">⚠️ ' + r.avisoDrive + '</span>';
+    (r.avisos || []).forEach(a => { msg += '<br><span class="aviso">⚠️ ' + a.texto + '</span>'; });
+    statusEl.innerHTML = msg;
 
     ['km','lecGlp','lecGas','consGlp','consGas','estacion'].forEach(id => $(id).value = '');
     $('revision').style.display = 'none';
     $('preview').style.display = 'none';
     $('btnCam').classList.remove('ok');
     $('btnGal').classList.remove('ok');
-    fotoB64 = null; ANALISIS = null;
+    fotoB64 = null; ANALISIS = null; RECIBO = null;
     cargarDashboard();
   } catch (err) {
-    statusEl.innerHTML = '<span class="aviso">❌ ' + err.message + '</span>';
+    info('❌ ' + err.message, 'aviso');
   } finally {
     $('btnGuardar').disabled = false;
   }
 };
 
 // ==========================================================
-//  Dashboard — carga por JSONP (Apps Script no responde al preflight)
+//  Dashboard
 // ==========================================================
-function cargarDashboard() {
-  return new Promise(resolve => {
-    const cb = 'dashCB_' + Date.now();
-    const s = document.createElement('script');
-    window[cb] = data => {
-      if (data && data.ok) { DATOS = data; pintarTodo(); }
-      else statusEl.innerHTML = '<span class="aviso">Dashboard: ' + ((data && data.error) || 'sin respuesta') + '</span>';
-      delete window[cb]; s.remove(); resolve();
-    };
-    s.onerror = () => {
-      statusEl.innerHTML = '<span class="aviso">No se pudo cargar el dashboard (revisa la URL o el token).</span>';
-      delete window[cb]; s.remove(); resolve();
-    };
-    s.src = WEBAPP_URL + '?action=dashboard&token=' + encodeURIComponent(TOKEN) + '&callback=' + cb;
-    document.body.appendChild(s);
-  });
+async function cargarDashboard() {
+  try {
+    const res = await fetch(API + '?action=dashboard', { cache: 'no-store' });
+    const data = await leerJSON(res);
+    if (!data.ok) return info('Dashboard: ' + (data.error || 'sin respuesta'), 'aviso');
+    DATOS = data;
+    pintarTodo();
+    pintarPistas();
+  } catch (err) {
+    info('No se pudo cargar el dashboard: ' + err.message, 'aviso');
+  }
 }
 
 $('btnRefresh').onclick = cargarDashboard;
 $('tgReal').onclick  = () => { MODO = 'real';  $('tgReal').classList.add('on');  $('tgCoche').classList.remove('on'); pintarTodo(); };
 $('tgCoche').onclick = () => { MODO = 'coche'; $('tgCoche').classList.add('on'); $('tgReal').classList.remove('on');  pintarTodo(); };
+
+function pintarPistas() {
+  const ult = (DATOS.registros || []).slice(-1)[0];
+  if (ult) $('hintKm').textContent = 'Último registro: ' + km(ult.kmTotales) + ' · ' + ult.fecha.split('-').reverse().join('/');
+}
 
 // ==========================================================
 //  Agregados
@@ -438,16 +470,15 @@ function agregados() {
   const regs = DATOS.registros || [];
   const tickets = {};
   regs.forEach(r => {
-    if (!tickets[r.id]) tickets[r.id] = { fecha: r.fecha, kmTramo: r.kmTramo, kmGLP: r.kmGLP, kmGas: r.kmGas, estacion: r.estacion };
+    if (!tickets[r.id]) tickets[r.id] = { fecha: r.fecha, kmTramo: r.kmTramo, kmGLP: r.kmGLP, kmGas: r.kmGas };
   });
   const listaTickets = Object.values(tickets);
+  const suma = (arr, f) => arr.reduce((a, x) => a + (f(x) || 0), 0);
 
-  const suma = (arr, f) => arr.reduce((a, x) => { const v = f(x); return a + (v || 0); }, 0);
-
-  const kmGLP  = suma(listaTickets, t => t.kmGLP);
-  const kmGas  = suma(listaTickets, t => t.kmGas);
-  const kmTot  = suma(listaTickets, t => t.kmTramo);
-  const kmMax  = Math.max(0, ...regs.map(r => r.kmTotales || 0));
+  const kmGLP = suma(listaTickets, t => t.kmGLP);
+  const kmGas = suma(listaTickets, t => t.kmGas);
+  const kmTot = suma(listaTickets, t => t.kmTramo);
+  const kmMax = Math.max(0, ...regs.map(r => r.kmTotales || 0));
 
   const porTipo = {};
   regs.forEach(r => {
@@ -470,7 +501,6 @@ function agregados() {
     p.consumoMedio = media(MODO === 'real' ? p.consReal : p.consCoche);
   });
 
-  // Coste por km agrupando gasolinas (para comparar GLP contra gasolina)
   const costesGLP = [], costesGas = [];
   regs.forEach(r => {
     const c = MODO === 'real' ? r.costeKmReal : r.costeKmCoche;
@@ -498,6 +528,7 @@ function leyenda(el, items) {
 }
 const ejes = {
   responsive: true,
+  maintainAspectRatio: false,          // manda el alto de .chart-box
   plugins: { legend: { display: false } },
   scales: {
     x: { ticks: { color: '#9A9A9A', maxRotation: 0, autoSkip: true }, grid: { color: '#2A2A2A' } },
@@ -505,12 +536,17 @@ const ejes = {
   }
 };
 
+// En las barras el eje de valores SIEMPRE arranca en cero: si no, las barras
+// nacen fuera del área del gráfico y tapan las etiquetas del otro eje.
+const ejeValorBarra = { beginAtZero: true, ticks: { color: '#9A9A9A' }, grid: { color: '#2A2A2A' } };
+const ejeCategoria  = { ticks: { color: '#9A9A9A', maxRotation: 0, autoSkip: false }, grid: { display: false } };
+const donut = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } };
+
 function pintarTodo() {
   const a = agregados();
   const etiqueta = MODO === 'real' ? '· cálculo real' : '· datos del coche';
   $('modoCoste').textContent = etiqueta;
   $('modoConsumo').textContent = etiqueta;
-
   pintarKPIs(a);
   pintarInversion(a);
   pintarKm(a);
@@ -522,10 +558,7 @@ function pintarTodo() {
 function pintarKPIs(a) {
   const pctGLP = (a.kmGLP + a.kmGas) ? (a.kmGLP / (a.kmGLP + a.kmGas)) * 100 : null;
   const ratio = (a.costeGLP && a.costeGas) ? a.costeGas / a.costeGLP : null;
-  const glp = a.porTipo['GLP'] || {};
-
-  const gasolinas = Object.values(a.porTipo).filter(p => !esGLP(p.tipo));
-  const gastoGas = gasolinas.reduce((x, p) => x + p.total, 0);
+  const gastoGas = Object.values(a.porTipo).filter(p => !esGLP(p.tipo)).reduce((x, p) => x + p.total, 0);
 
   const tarjetas = [
     { k: 'Odómetro', v: km(a.kmMax), s: km(a.kmTot) + ' registrados' },
@@ -561,7 +594,7 @@ function pintarKPIs(a) {
     const positivo = a.ahorro > 0;
     html += `<div class="kpi wide">
       <div class="k">${positivo ? 'Ahorro acumulado con GLP' : 'Sobrecoste acumulado del GLP'}</div>
-      <div class="v" style="color:${positivo ? 'var(--oro)' : '#FF6B6B'}">${eur(Math.abs(a.ahorro))}</div>
+      <div class="v" style="color:${positivo ? 'var(--oro)' : 'var(--rojo)'}">${eur(Math.abs(a.ahorro))}</div>
       <div class="s">Frente a haber recorrido esos ${km(a.kmGLP)} con gasolina</div>
     </div>`;
   }
@@ -583,7 +616,7 @@ function pintarInversion(a) {
   pintar('chInversion', {
     type: 'doughnut',
     data: { labels: tipos.map(t => t.tipo), datasets: [{ data: tipos.map(t => t.total), backgroundColor: tipos.map(t => colorDe(t.tipo)), borderWidth: 0 }] },
-    options: { responsive: true, plugins: { legend: { display: false } } }
+    options: donut
   });
 }
 
@@ -592,12 +625,11 @@ function pintarKm(a) {
     { label: 'GLP', valor: a.kmGLP, color: COLORES['GLP'] },
     { label: 'Gasolina', valor: a.kmGas, color: COLORES['Gasolina 98'] }
   ].filter(d => d.valor > 0);
-
   leyenda('lgKm', datos.map(d => ({ color: d.color, label: d.label + ' · ' + km(d.valor) })));
   pintar('chKm', {
     type: 'doughnut',
     data: { labels: datos.map(d => d.label), datasets: [{ data: datos.map(d => d.valor), backgroundColor: datos.map(d => d.color), borderWidth: 0 }] },
-    options: { responsive: true, plugins: { legend: { display: false } } }
+    options: donut
   });
 }
 
@@ -608,10 +640,7 @@ function pintarSeriesTemporales(a) {
 
   const serie = campo => tipos.map(t => ({
     label: t,
-    data: fechas.map(f => {
-      const r = a.regs.find(x => x.fecha === f && x.tipo === t);
-      return r ? r[campo] : null;
-    }),
+    data: fechas.map(f => { const r = a.regs.find(x => x.fecha === f && x.tipo === t); return r ? r[campo] : null; }),
     borderColor: colorDe(t), backgroundColor: colorDe(t),
     borderWidth: 2, pointRadius: 3, tension: .3, spanGaps: true
   }));
@@ -633,16 +662,39 @@ function pintarEstaciones(a) {
     mapa[clave].precios.push(r.precio);
   });
   const lista = Object.values(mapa)
-    .map(x => ({ ...x, medio: x.precios.reduce((p, c) => p + c, 0) / x.precios.length }))
+    .map(x => ({ estacion: x.estacion, tipo: x.tipo, medio: x.precios.reduce((p, c) => p + c, 0) / x.precios.length }))
     .sort((x, y) => x.medio - y.medio);
+
+  // El alto crece con el número de barras: con muchas estaciones la tarjeta
+  // se alarga en vez de aplastarlas.
+  $('boxEstaciones').style.height = Math.max(160, lista.length * 30 + 46) + 'px';
+
+  const tiposPresentes = [...new Set(lista.map(x => x.tipo))];
+  leyenda('lgEstaciones', tiposPresentes.map(t => ({ color: colorDe(t), label: t })));
 
   pintar('chEstaciones', {
     type: 'bar',
+    plugins: [etiquetasBarra],
     data: {
-      labels: lista.map(x => x.estacion.replace(/^E\.?S\.?\s*/i, '') + ' (' + x.tipo.replace('Gasolina ', '') + ')'),
-      datasets: [{ data: lista.map(x => x.medio), backgroundColor: lista.map(x => colorDe(x.tipo)), borderWidth: 0, borderRadius: 4 }]
+      labels: lista.map(x => x.estacion.replace(/^E\.?\s?S\.?\s*/i, '') + ' · ' + x.tipo.replace('Gasolina ', '')),
+      datasets: [{
+        data: lista.map(x => x.medio),
+        backgroundColor: lista.map(x => colorDe(x.tipo)),
+        borderWidth: 0, borderRadius: 4, maxBarThickness: 20
+      }]
     },
-    options: { ...ejes, indexAxis: 'y', scales: { x: ejes.scales.y, y: { ...ejes.scales.x, ticks: { color: '#9A9A9A', font: { size: 10 } } } } }
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      layout: { padding: { right: 38 } },   // hueco para la cifra al final de la barra
+      plugins: {
+        legend: { display: false },
+        etiquetasBarra: { formato: v => dec(v, 3) }
+      },
+      scales: {
+        x: ejeValorBarra,
+        y: { ...ejeCategoria, ticks: { color: '#C8C8C8', font: { size: 10 }, autoSkip: false } }
+      }
+    }
   });
 }
 
@@ -650,34 +702,31 @@ function pintarMeses(a) {
   const meses = [...new Set(a.regs.map(r => r.fecha.slice(0, 7)))].sort();
   const tipos = Object.keys(a.porTipo);
   leyenda('lgMes', tipos.map(t => ({ color: colorDe(t), label: t })));
-
   pintar('chMeses', {
     type: 'bar',
     data: {
-      labels: meses.map(m => { const [y, mm] = m.split('-'); return mm + '/' + y.slice(2); }),
+      labels: meses.map(m => { const p = m.split('-'); return p[1] + '/' + p[0].slice(2); }),
       datasets: tipos.map(t => ({
         label: t,
         data: meses.map(m => a.regs.filter(r => r.fecha.slice(0, 7) === m && r.tipo === t).reduce((s, r) => s + (r.total || 0), 0)),
-        backgroundColor: colorDe(t), borderWidth: 0, borderRadius: 4
+        backgroundColor: colorDe(t), borderWidth: 0, borderRadius: 4, maxBarThickness: 46
       }))
     },
-    options: { ...ejes, scales: { x: { ...ejes.scales.x, stacked: true }, y: { ...ejes.scales.y, stacked: true } } }
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ...ejeCategoria, stacked: true },
+        y: { ...ejeValorBarra, stacked: true }
+      }
+    }
   });
 }
 
 // ==========================================================
 //  Arranque
 // ==========================================================
-cargarDashboard().then(() => {
-  const ult = (DATOS.registros || []).slice(-1)[0];
-  if (ult) {
-    $('hintKm').textContent = 'Último registro: ' + km(ult.kmTotales);
-    const partes = [];
-    if (ult.lecturaGLP != null) partes.push('Última lectura GLP: ' + km(ult.lecturaGLP));
-    if (ult.lecturaGas != null) partes.push('gasolina: ' + km(ult.lecturaGas));
-    $('hintLec').textContent = partes.join(' · ');
-  }
-});
+cargarDashboard();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

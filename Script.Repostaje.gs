@@ -1,513 +1,566 @@
-const GEMINI_API_KEY = ''; // <-- Pon tu clave aquí entre las comillas
-
-function procesarTicket(e) {
-  try {
-    const libro = SpreadsheetApp.getActiveSpreadsheet();
-    
-    // 1. Encontrar la pestaña principal dinámicamente buscando la columna "ID"
-    let sheetDestino = null;
-    const sheets = libro.getSheets();
-    for (let s of sheets) {
-      if (s.getRange("A1").getValue() === "ID") {
-        sheetDestino = s;
-        break;
-      }
-    }
-    
-    if (!sheetDestino) {
-      console.error("No se ha encontrado la pestaña principal. Asegúrate de no borrar la celda A1 que dice 'ID'.");
-      return;
-    }
-
-    // 2. Extraer datos del objeto del evento
-    const km = e.namedValues['KM actuales del coche.'][0];
-    const urlsImagen = e.namedValues['Recibo del repostaje.'][0];
-    const timestamp = e.namedValues['Marca temporal'][0];
-    const idRecibo = "REP-" + new Date().getTime().toString().slice(-6);
-    
-    const fileId = urlsImagen.split('id=')[1];
-    const file = DriveApp.getFileById(fileId);
-    const base64Image = Utilities.base64Encode(file.getBlob().getBytes());
-    
-    // 3. Petición a la API
-    const payload = {
-      "contents": [{
-        "parts": [
-          {"text": "Analiza este recibo de gasolinera. Devuelve UNICAMENTE un array JSON válido: [{\"tipo\": \"Gasolina 95\" o \"Gasolina 98\" o \"GLP\", \"litros\": 0.00, \"precio_litro\": 0.00, \"total\": 0.00}]. No añadas texto fuera del JSON."},
-          {
-            "inline_data": {
-              "mime_type": file.getMimeType(),
-              "data": base64Image
-            }
-          }
-        ]
-      }]
-    };
-    
-    const options = {
-      'method': 'post',
-      'contentType': 'application/json',
-      'payload': JSON.stringify(payload),
-      'muteHttpExceptions': true // <-- Permite capturar el error detallado de la API
-    };
-    
-    // --- CAMBIO DE LA URL AL MODELO LATEST ---
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-    
-    const response = UrlFetchApp.fetch(url, options);
-    
-    // Si la API no devuelve un 200 OK, registramos el mensaje de error real
-    if (response.getResponseCode() !== 200) {
-      console.error("Error en la API de Google (" + response.getResponseCode() + "): " + response.getContentText());
-      return;
-    }
-
-    const jsonRes = JSON.parse(response.getContentText());
-    
-    // 4. Limpieza y parseo de la respuesta
-    let textOut = jsonRes.candidates[0].content.parts[0].text;
-    textOut = textOut.replace(/```json/g, '').replace(/```/g, '').trim();
-    const datosTicket = JSON.parse(textOut);
-    
-    const ultimaFila = sheetDestino.getLastRow();
-    
-    // 5. Inserción de filas y fórmulas automáticas
-    for (let i = 0; i < datosTicket.length; i++) {
-      
-      // Calculamos matemáticamente en qué fila estamos escribiendo
-      const filaActual = ultimaFila + i + 1;
-      const filaAnterior = filaActual - 1;
-      
-      // Construimos las fórmulas inyectando el número de fila dinámico
-      const formulaKM = `=C${filaActual}-C${filaAnterior}`;
-      const formulaConsumo = `=SI.ERROR((E${filaActual}/H${filaActual})*100; "")`;
-      const formulaCoste = `=SI.ERROR(G${filaActual}/H${filaActual}; "")`;
-
-      sheetDestino.appendRow([
-        idRecibo, // Columna A
-        timestamp, // Columna B
-        km, // Columna C
-        datosTicket[i].tipo, // Columna D
-        datosTicket[i].litros, // Columna E
-        datosTicket[i].precio_litro, // Columna F
-        datosTicket[i].total, // Columna G
-        formulaKM, // Columna H (¡Fórmula inyectada!)
-        formulaConsumo, // Columna I (¡Fórmula inyectada!)
-        formulaCoste, // Columna J (¡Fórmula inyectada!)
-        urlsImagen // Columna K
-      ]);
-      console.log(`Guardado automático en fila ${filaActual}: ${datosTicket[i].litros}L`);
-    }
-    
-    console.log("Inserción completada con éxito. Combustibles detectados: " + datosTicket.length);
-
-  } catch (error) {
-    console.error("Fallo crítico en la ejecución:");
-    console.error(error.stack);
-  }
-}
-
-
-
-
-function actualizarDashboard() {
-  const libro = SpreadsheetApp.getActiveSpreadsheet();
-  const hojaDash = libro.getSheetByName("Dashboard");
-  
-  let hojaDatos = null;
-  for (let s of libro.getSheets()) {
-    if (s.getRange("A1").getValue() === "ID") {
-      hojaDatos = s;
-      break;
-    }
-  }
-  
-  if (!hojaDatos || !hojaDash) {
-    SpreadsheetApp.getUi().alert("Error: No encuentro la pestaña 'Dashboard' o la hoja de datos.");
-    return;
-  }
-
-  // Limpiar gráficos viejos
-  const graficosViejos = hojaDash.getCharts();
-  for (let i = 0; i < graficosViejos.length; i++) {
-    hojaDash.removeChart(graficosViejos[i]);
-  }
-
-  const ultimaFila = hojaDatos.getLastRow();
-  if (ultimaFila < 2) {
-    SpreadsheetApp.getUi().alert("Aún no hay datos suficientes para graficar.");
-    return;
-  }
-
-  // Leemos toda la tabla de golpe
-  const datosRaw = hojaDatos.getRange(2, 1, ultimaFila - 1, 10).getValues();
-  
-  // 1. Sacamos qué combustibles existen realmente
-  const tiposUnicos = [...new Set(datosRaw.map(r => r[3]).filter(String))];
-  
-  const fechasMap = new Map();
-  const quesitoMap = new Map();
-
-  // 2. Procesamos y limpiamos fila a fila (adiós problemas de texto/número)
-  datosRaw.forEach(row => {
-    let fecha = row[1];
-    if (!fecha) return;
-    
-    // Agrupamos por tiempo exacto
-    let timeKey = (fecha instanceof Date) ? fecha.getTime() : fecha.toString();
-    if (!fechasMap.has(timeKey)) {
-      fechasMap.set(timeKey, { dateObj: fecha, valores: {} });
-    }
-    
-    let tipo = row[3];
-    // Forzamos conversión a número arreglando comas canarias/españolas a puntos JS
-    let precio = parseFloat(row[5].toString().replace(',', '.'));
-    let total = parseFloat(row[6].toString().replace(',', '.'));
-    let costeKM = parseFloat(row[9].toString().replace(',', '.'));
-    
-    fechasMap.get(timeKey).valores[tipo] = { 
-      precio: isNaN(precio) ? null : precio, 
-      costeKM: isNaN(costeKM) ? null : costeKM 
-    };
-    
-    // Sumamos el dinero para el quesito
-    if (tipo && !isNaN(total)) {
-      quesitoMap.set(tipo, (quesitoMap.get(tipo) || 0) + total);
-    }
-  });
-
-  // 3. Construimos las matrices 2D perfectas para Google Charts
-  let tablaPrecios = [["Fecha", ...tiposUnicos]];
-  let tablaCostes = [["Fecha", ...tiposUnicos]];
-  
-  // Ordenamos cronológicamente
-  const fechasOrdenadas = Array.from(fechasMap.values()).sort((a, b) => a.dateObj - b.dateObj);
-
-  fechasOrdenadas.forEach(item => {
-    let filaPrecio = [item.dateObj];
-    let filaCoste = [item.dateObj];
-    
-    tiposUnicos.forEach(tipo => {
-      let datosTipo = item.valores[tipo];
-      filaPrecio.push(datosTipo ? datosTipo.precio : null);
-      filaCoste.push(datosTipo ? datosTipo.costeKM : null);
-    });
-    
-    tablaPrecios.push(filaPrecio);
-    tablaCostes.push(filaCoste);
-  });
-
-  let tablaQuesito = [["Tipo", "Total Invertido"]];
-  for (let [tipo, total] of quesitoMap.entries()) {
-    tablaQuesito.push([tipo, total]);
-  }
-
-  // 4. Volcamos los datos limpios en la hoja oculta
-  let hojaAux = libro.getSheetByName("Motor_Graficos");
-  if (!hojaAux) {
-    hojaAux = libro.insertSheet("Motor_Graficos");
-    hojaAux.hideSheet(); 
-  }
-  hojaAux.clear();
-
-  hojaAux.getRange(1, 1, tablaPrecios.length, tablaPrecios[0].length).setValues(tablaPrecios);
-  
-  const colCosteInicio = tablaPrecios[0].length + 2;
-  hojaAux.getRange(1, colCosteInicio, tablaCostes.length, tablaCostes[0].length).setValues(tablaCostes);
-  
-  const colQuesitoInicio = colCosteInicio + tablaCostes[0].length + 2;
-  hojaAux.getRange(1, colQuesitoInicio, tablaQuesito.length, 2).setValues(tablaQuesito);
-
-  SpreadsheetApp.flush();
-
-  // 5. Capturamos rangos y dibujamos (ESTÉTICA INTACTA)
-  const rangoPreciosPivot = hojaAux.getRange(1, 1, tablaPrecios.length, tablaPrecios[0].length);
-  const rangoCostePivot = hojaAux.getRange(1, colCosteInicio, tablaCostes.length, tablaCostes[0].length);
-  const rangoQuesito = hojaAux.getRange(1, colQuesitoInicio, tablaQuesito.length, 2);
-
-  const bgColor = '#1E1E1E'; 
-  const textColor = '#FFFFFF'; 
-  const gridColor = '#333333'; 
-
-  // 1. Definimos los colores por combustible de forma absoluta
-  const colorGas95 = '#28f202'; // Verde
-  const colorGas98 = '#00FFFF'; // Azul
-  const colorGLP = '#FF5C00';   // Naranja
-
-  // 2. Creamos paletas específicas basadas en el orden de los datos de cada gráfica
-  
-  // Orden del Quesito (según tu imagen): Gasolina 95, GLP, Gasolina 98
-  const paletteQuesito = [colorGas95, colorGLP, colorGas98]; 
-  
-  // Orden de las Líneas (según sus leyendas): GLP, Gasolina 98, Gasolina 95
-  const paletteLineas = [colorGLP, colorGas98, colorGas95]; 
-
-  const chartGasto = hojaDash.newChart()
-    .setChartType(Charts.ChartType.PIE)
-    .addRange(rangoQuesito)
-    .setPosition(3, 2, 0, 0)
-    .setOption('title', 'Distribución de Inversión (€) - GLP vs Gasolina')
-    .setOption('backgroundColor', bgColor)
-    .setOption('titleTextStyle', {color: textColor, fontSize: 16})
-    .setOption('legend', {textStyle: {color: textColor}})
-    .setOption('colors', paletteQuesito) // <-- Paleta del quesito
-    .setOption('pieHole', 0.3)
-    .setOption('width', 600)
-    .setOption('height', 400)
-    .build();
-
-  const chartCosteKM = hojaDash.newChart()
-    .setChartType(Charts.ChartType.LINE)
-    .addRange(rangoCostePivot)
-    .setPosition(3, 9, 0, 0)
-    .setOption('title', 'Evolución del Coste por Kilómetro (€/km)')
-    .setOption('backgroundColor', bgColor)
-    .setOption('titleTextStyle', {color: textColor, fontSize: 16})
-    .setOption('legend', {textStyle: {color: textColor}})
-    .setOption('colors', paletteLineas) // <-- Paleta de las líneas
-    .setOption('hAxis', {textStyle: {color: textColor}, gridlines: {color: gridColor}})
-    .setOption('vAxis', {textStyle: {color: textColor}, gridlines: {color: gridColor}})
-    .setOption('curveType', 'function')
-    .setNumHeaders(1) 
-    .setOption('useFirstColumnAsDomain', true)
-    .setOption('treatLabelsAsText', false)
-    .setOption('interpolateNulls', true)
-    .setOption('pointSize', 6) 
-    .setOption('width', 600)
-    .setOption('height', 400)
-    .build();
-
-  const chartPrecio = hojaDash.newChart()
-    .setChartType(Charts.ChartType.LINE)
-    .addRange(rangoPreciosPivot)
-    .setPosition(23, 2, 0, 0)
-    .setOption('title', 'Fluctuación del Precio por Litro (€)')
-    .setOption('backgroundColor', bgColor)
-    .setOption('titleTextStyle', {color: textColor, fontSize: 16})
-    .setOption('legend', {textStyle: {color: textColor}})
-    .setOption('colors', paletteLineas) // <-- Paleta de las líneas
-    .setOption('hAxis', {textStyle: {color: textColor}, gridlines: {color: gridColor}})
-    .setOption('vAxis', {textStyle: {color: textColor}, gridlines: {color: gridColor}})
-    .setOption('curveType', 'function')
-    .setNumHeaders(1) 
-    .setOption('useFirstColumnAsDomain', true)
-    .setOption('treatLabelsAsText', false)
-    .setOption('interpolateNulls', true)
-    .setOption('pointSize', 6) 
-    .setOption('width', 1265)
-    .setOption('height', 400)
-    .build();
-
-  hojaDash.insertChart(chartGasto);
-  hojaDash.insertChart(chartCosteKM);
-  hojaDash.insertChart(chartPrecio);
-}
-
-function onEdit(e) {
-  // 1. Definimos la celda donde está nuestra casilla de verificación
-  const celdaBoton = 'A1'; 
-  const nombreHoja = 'Dashboard'; 
-  
-  // Si e (el evento) no existe, salimos
-  if (!e) return; 
-
-  const rangoEditado = e.range;
-  const hojaActiva = rangoEditado.getSheet();
-  
-  // 2. Comprobamos la celda, la hoja y si la casilla se marcó (TRUE)
-  if (hojaActiva.getName() === nombreHoja && rangoEditado.getA1Notation() === celdaBoton && e.value === "TRUE") {
-    
-    // 3. Llamamos a tu función principal (CORREGIDO)
-    actualizarDashboard(); 
-    
-    // 4. Desmarcamos la casilla automáticamente para simular un botón
-    rangoEditado.uncheck();
-  }
-}
-
 /**
- * BACKEND WEB APP - Registro de Repostajes
- * Sustituye el flujo de Google Form por endpoints JSON para la PWA.
+ * RefuelControl_60F10 — Backend Apps Script  ·  v3
+ * Dacia Sandero Stepway ECO-G 120 (bífuel GLP + gasolina)
  *
- * DESPLIEGUE:
- * Extensiones > Apps Script > Implementar > Nueva implementación
- * Tipo: Aplicación web | Ejecutar como: Yo | Acceso: Cualquiera con el enlace
+ * DESPLIEGUE (obligatorio tras cada cambio):
+ *   Implementar > Gestionar implementaciones > lápiz > Versión: Nueva versión > Implementar
+ *
+ * MODELO DE CÁLCULO
+ *   Se resetean los contadores parciales después de cada repostaje, así que la
+ *   lectura de cada contador ES el recorrido de ese tramo.
+ *   Un depósito se llena entero cuando se reposta, pero no siempre se repostan
+ *   los dos combustibles. Por eso el consumo de cada combustible se calcula
+ *   contra los km acumulados de ESE combustible desde su último repostaje,
+ *   no contra los del último ticket.
  */
 
-const SHARED_TOKEN = '';   // pseudo-auth para que no escriba cualquiera con la URL
-const CARPETA_RECIBOS_ID = '';        // opcional: ID de carpeta Drive para guardar fotos
+// ============================================================
+//  CONFIG
+// ============================================================
 
-// ---------- ENTRADA WEB APP ----------
+const PROPS = PropertiesService.getScriptProperties();
+
+const GEMINI_API_KEY     = PROPS.getProperty('GEMINI_API_KEY') || '';
+const SHARED_TOKEN       = PROPS.getProperty('SHARED_TOKEN') || '';
+const CARPETA_RECIBOS_ID = PROPS.getProperty('CARPETA_RECIBOS_ID') || '';
+
+// true  = reseteas los parciales tras cada repostaje (la lectura es el tramo)
+// false = los contadores son acumulativos (el tramo es la diferencia)
+const CONTADORES_SE_RESETEAN = true;
+
+const HOJA_DATOS = 'Registro de Repostajes';
+const MODELO     = 'gemini-2.5-flash';
+const ZONA       = 'Atlantic/Canary';
+
+const CABECERAS = [
+  'ID', 'Timestamp', 'Estación', 'Tipo Combustible', 'Litros',
+  'Precio por Litro (€)', 'Total Invertido (€)', 'KM Totales',
+  'KM Recorridos (tramo)', 'Lectura KM GLP (coche)', 'Lectura KM Gasolina (coche)',
+  'KM GLP (tramo)', 'KM Gasolina (tramo)', 'Consumo coche (L/100km)',
+  'Consumo real (L/100km)', 'Coste por KM real (€/km)', 'Coste por KM coche (€/km)',
+  'Enlace Recibo', 'KM de este combustible desde su último repostaje'
+];
+
+const C = {
+  ID: 0, TS: 1, ESTACION: 2, TIPO: 3, LITROS: 4, PRECIO: 5, TOTAL: 6,
+  KM_TOTAL: 7, KM_TRAMO: 8, LEC_GLP: 9, LEC_GAS: 10, KM_GLP: 11, KM_GAS: 12,
+  CONS_COCHE: 13, CONS_REAL: 14, COSTE_REAL: 15, COSTE_COCHE: 16, RECIBO: 17,
+  KM_CALC: 18
+};
+
+// ============================================================
+//  ENTRADA WEB APP
+// ============================================================
 
 function doGet(e) {
-  if (e.parameter.token !== SHARED_TOKEN) return jsonOut({ error: 'No autorizado' }, e.parameter.callback);
-
-  const data = e.parameter.action === 'dashboard' ? getDashboardData() : { status: 'ok' };
-  return jsonOut(data, e.parameter.callback);
+  const cb = e && e.parameter ? e.parameter.callback : null;
+  try {
+    if (!e || e.parameter.token !== SHARED_TOKEN) return jsonOut({ ok: false, error: 'No autorizado' }, cb);
+    switch (e.parameter.action) {
+      case 'dashboard': return jsonOut(Object.assign({ ok: true }, getDashboardData()), cb);
+      case 'ping':      return jsonOut({ ok: true, version: '3.0', drive: diagnosticoDrive() }, cb);
+      default:          return jsonOut({ ok: true, status: 'ok' }, cb);
+    }
+  } catch (err) {
+    return jsonOut({ ok: false, error: err.message }, cb);
+  }
 }
 
 function doPost(e) {
   try {
-    // OJO: el cliente debe mandar Content-Type 'text/plain' para evitar el
-    // preflight CORS que Apps Script no sabe responder.
     const body = JSON.parse(e.postData.contents);
-    if (body.token !== SHARED_TOKEN) return jsonOut({ error: 'No autorizado' });
+    if (body.token !== SHARED_TOKEN) return jsonOut({ ok: false, error: 'No autorizado' });
 
-    const resultado = registrarRepostaje(body.km, body.imagenBase64, body.mimeType, new Date());
-    return jsonOut({ ok: true, registros: resultado });
-
-  } catch (error) {
-    return jsonOut({ ok: false, error: error.message });
+    switch (body.action) {
+      case 'subir':    return jsonOut(subirRecibo(body.imagenBase64, body.mimeType));
+      case 'analizar': return jsonOut(analizarTicket(body));
+      case 'guardar':  return jsonOut(guardarRepostaje(body.datos));
+      default:         return jsonOut({ ok: false, error: 'Acción desconocida: ' + body.action });
+    }
+  } catch (err) {
+    return jsonOut({ ok: false, error: err.message });
   }
 }
 
 function jsonOut(obj, callback) {
   if (callback) {
-    return ContentService.createTextOutput(`${callback}(${JSON.stringify(obj)})`)
+    return ContentService.createTextOutput(callback + '(' + JSON.stringify(obj) + ')')
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// ---------- NÚCLEO COMPARTIDO (lógica de tu procesarTicket original) ----------
+// ============================================================
+//  PASO 1 — SUBIR LA FOTO A DRIVE (llamada corta y aislada)
+// ============================================================
 
-function registrarRepostaje(km, base64Image, mimeType, timestamp) {
-  const libro = SpreadsheetApp.getActiveSpreadsheet();
-  const sheetDestino = encontrarHojaPorCabecera(libro, 'ID');
-  if (!sheetDestino) throw new Error("No se encuentra la pestaña con cabecera 'ID'.");
+function subirRecibo(base64Image, mimeType) {
+  if (!base64Image) return { ok: false, error: 'No llegó la imagen.' };
+  try {
+    const nombre = 'TMP-' + Utilities.formatDate(new Date(), ZONA, 'yyyyMMdd-HHmmss') + '.jpg';
+    const blob = Utilities.newBlob(Utilities.base64Decode(base64Image), mimeType || 'image/jpeg', nombre);
+    const file = DriveApp.getFolderById(CARPETA_RECIBOS_ID).createFile(blob);
+    return { ok: true, fileId: file.getId(), url: file.getUrl() };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
 
-  const idRecibo = "REP-" + new Date().getTime().toString().slice(-6);
+// ============================================================
+//  PASO 2 — ANALIZAR CON GEMINI (acepta fileId o la imagen suelta)
+// ============================================================
 
-  let urlRecibo = '';
-  if (base64Image) {
+function analizarTicket(body) {
+  if (!GEMINI_API_KEY) return { ok: false, error: 'Falta GEMINI_API_KEY en las propiedades del script.' };
+
+  let base64 = body.imagenBase64 || '';
+  let mime = body.mimeType || 'image/jpeg';
+
+  if (!base64 && body.fileId) {
     try {
-      const blob = Utilities.newBlob(Utilities.base64Decode(base64Image), mimeType || 'image/jpeg', idRecibo + '.jpg');
-      const carpeta = CARPETA_RECIBOS_ID ? DriveApp.getFolderById(CARPETA_RECIBOS_ID) : DriveApp.getRootFolder();
-      urlRecibo = carpeta.createFile(blob).getUrl();
-    } catch (errDrive) {
-      console.error('No se pudo guardar la foto en Drive (revisa permisos): ' + errDrive.message);
-      // seguimos sin enlace de foto en vez de bloquear todo el registro
+      const blob = DriveApp.getFileById(body.fileId).getBlob();
+      base64 = Utilities.base64Encode(blob.getBytes());
+      mime = blob.getContentType();
+    } catch (err) {
+      return { ok: false, error: 'No pude leer la foto de Drive: ' + err.message };
+    }
+  }
+  if (!base64) return { ok: false, error: 'No hay imagen que analizar.' };
+
+  const prompt =
+    'Analiza este recibo de una estación de servicio española. Devuelve SOLO un objeto JSON con esta forma exacta:\n' +
+    '{"estacion":"nombre comercial de la gasolinera","municipio":"localidad o vacío",' +
+    '"fecha_ticket":"dd/mm/aaaa o vacío",' +
+    '"items":[{"tipo":"GLP|Gasolina 95|Gasolina 98","litros":0.00,"precio_litro":0.00,"total":0.00}]}\n' +
+    'Normaliza el producto: AUTOGAS, GLP o GAS -> "GLP"; cualquier 98 (DISAMax 98, Efitec 98, Nitro 98) -> "Gasolina 98"; ' +
+    'cualquier 95 (Efitec 95, Star 95, sin plomo 95) -> "Gasolina 95".\n' +
+    'En "estacion" pon el nombre comercial legible, por ejemplo "E.S. DISA Padre Anchieta". ' +
+    'Un ticket puede traer uno o dos productos. Usa punto decimal. Sin texto fuera del JSON.';
+
+  const payload = {
+    contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mime, data: base64 } }] }],
+    generationConfig: { temperature: 0, responseMimeType: 'application/json' }
+  };
+
+  const res = UrlFetchApp.fetch(
+    'https://generativelanguage.googleapis.com/v1beta/models/' + MODELO + ':generateContent?key=' + GEMINI_API_KEY,
+    { method: 'post', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true }
+  );
+
+  if (res.getResponseCode() !== 200) {
+    return { ok: false, error: 'Gemini (' + res.getResponseCode() + '): ' + res.getContentText().slice(0, 300) };
+  }
+
+  let texto = JSON.parse(res.getContentText()).candidates[0].content.parts[0].text;
+  texto = texto.replace(/```json/g, '').replace(/```/g, '').trim();
+
+  let datos;
+  try {
+    datos = JSON.parse(texto);
+  } catch (err) {
+    return { ok: false, error: 'Gemini no devolvió JSON: ' + texto.slice(0, 200) };
+  }
+  if (Array.isArray(datos)) datos = { estacion: '', items: datos };
+
+  return {
+    ok: true,
+    estacion: datos.estacion || '',
+    municipio: datos.municipio || '',
+    fechaTicket: datos.fecha_ticket || '',
+    items: (datos.items || []).map(normalizarItem),
+    estacionesConocidas: listaEstaciones(),
+    ultimoRegistro: resumenUltimoTicket()
+  };
+}
+
+function normalizarItem(it) {
+  return {
+    tipo: normalizarTipo(it.tipo),
+    litros: num(it.litros) || 0,
+    precio_litro: num(it.precio_litro) || 0,
+    total: num(it.total) || 0
+  };
+}
+
+function normalizarTipo(t) {
+  const s = String(t || '').toUpperCase();
+  if (s.indexOf('GLP') >= 0 || s.indexOf('AUTOGAS') >= 0 || s.indexOf('GAS LICUADO') >= 0) return 'GLP';
+  if (s.indexOf('98') >= 0) return 'Gasolina 98';
+  if (s.indexOf('95') >= 0) return 'Gasolina 95';
+  return t || 'Desconocido';
+}
+
+function esGLP(tipo) { return String(tipo).toUpperCase().indexOf('GLP') >= 0; }
+
+function num(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  const x = parseFloat(String(v).replace(',', '.'));
+  return isNaN(x) ? null : x;
+}
+
+function redondear(v, dec) {
+  if (v === null || v === undefined || isNaN(v) || !isFinite(v)) return null;
+  const f = Math.pow(10, dec);
+  return Math.round(v * f) / f;
+}
+
+// ============================================================
+//  PASO 3 — GUARDAR
+//  Escribe solo los datos de entrada y deja que recalcularTodo()
+//  rellene todo lo derivado. Una única fuente de verdad.
+// ============================================================
+
+function guardarRepostaje(datos) {
+  const hoja = getHoja();
+
+  const items = (datos.items || []).map(normalizarItem).filter(i => i.litros > 0 || i.total > 0);
+  if (!items.length) return { ok: false, error: 'No hay ningún combustible que guardar.' };
+
+  const kmTotales = num(datos.kmTotales);
+  if (kmTotales === null) return { ok: false, error: 'Faltan los KM totales.' };
+
+  const idRecibo = 'REP-' + new Date().getTime().toString().slice(-6);
+  const ahora = new Date();
+
+  // Renombramos la foto con el ID definitivo
+  let urlRecibo = (datos.recibo && datos.recibo.url) || '';
+  if (datos.recibo && datos.recibo.fileId) {
+    try {
+      DriveApp.getFileById(datos.recibo.fileId)
+        .setName(idRecibo + '_' + Utilities.formatDate(ahora, ZONA, 'yyyy-MM-dd') + '.jpg');
+    } catch (err) {
+      console.error('No se pudo renombrar el recibo: ' + err.message);
     }
   }
 
-  const payload = {
-    contents: [{
-      parts: [
-        { text: "Analiza este recibo de gasolinera. Devuelve UNICAMENTE un array JSON válido: [{\"tipo\": \"Gasolina 95\" o \"Gasolina 98\" o \"GLP\", \"litros\": 0.00, \"precio_litro\": 0.00, \"total\": 0.00}]. No añadas texto fuera del JSON." },
-        { inline_data: { mime_type: mimeType || 'image/jpeg', data: base64Image } }
-      ]
-    }]
-  };
-
-  const options = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-  const response = UrlFetchApp.fetch(url, options);
-
-  if (response.getResponseCode() !== 200) {
-    throw new Error("Error API Gemini (" + response.getResponseCode() + "): " + response.getContentText());
-  }
-
-  let textOut = JSON.parse(response.getContentText()).candidates[0].content.parts[0].text;
-  textOut = textOut.replace(/```json/g, '').replace(/```/g, '').trim();
-  const datosTicket = JSON.parse(textOut);
-
-  const ultimaFila = sheetDestino.getLastRow();
-  const filasInsertadas = [];
-
-  for (let i = 0; i < datosTicket.length; i++) {
-    const filaActual = ultimaFila + i + 1;
-    const filaAnterior = filaActual - 1;
-
-    sheetDestino.appendRow([
-      idRecibo, timestamp, km,
-      datosTicket[i].tipo, datosTicket[i].litros, datosTicket[i].precio_litro, datosTicket[i].total,
-      `=C${filaActual}-C${filaAnterior}`,
-      `=SI.ERROR((E${filaActual}/H${filaActual})*100; "")`,
-      `=SI.ERROR(G${filaActual}/H${filaActual}; "")`,
-      urlRecibo
-    ]);
-
-    filasInsertadas.push({ tipo: datosTicket[i].tipo, litros: datosTicket[i].litros, total: datosTicket[i].total });
-  }
-
-  return { idRecibo, items: filasInsertadas };
-}
-
-function encontrarHojaPorCabecera(libro, valorA1) {
-  for (const s of libro.getSheets()) {
-    if (s.getRange("A1").getValue() === valorA1) return s;
-  }
-  return null;
-}
-
-// ---------- DASHBOARD EN JSON (mismo pivotado que actualizarDashboard, sin gráficos de Sheets) ----------
-
-function getDashboardData() {
-  const libro = SpreadsheetApp.getActiveSpreadsheet();
-  const hojaDatos = encontrarHojaPorCabecera(libro, 'ID');
-  if (!hojaDatos) return { error: "No hay hoja de datos" };
-
-  const ultimaFila = hojaDatos.getLastRow();
-  if (ultimaFila < 2) return { fechas: [], series: [], quesito: [] };
-
-  const datosRaw = hojaDatos.getRange(2, 1, ultimaFila - 1, 10).getValues();
-  const tiposUnicos = [...new Set(datosRaw.map(r => r[3]).filter(String))];
-
-  const fechasMap = new Map();
-  const quesitoMap = new Map();
-
-  datosRaw.forEach(row => {
-    const fecha = row[1];
-    if (!fecha) return;
-    const timeKey = (fecha instanceof Date) ? fecha.getTime() : fecha.toString();
-    if (!fechasMap.has(timeKey)) fechasMap.set(timeKey, { dateObj: fecha, valores: {} });
-
-    const tipo = row[3];
-    const precio = parseFloat(row[5].toString().replace(',', '.'));
-    const total = parseFloat(row[6].toString().replace(',', '.'));
-    const costeKM = parseFloat(row[9].toString().replace(',', '.'));
-
-    fechasMap.get(timeKey).valores[tipo] = {
-      precio: isNaN(precio) ? null : precio,
-      costeKM: isNaN(costeKM) ? null : costeKM
-    };
-
-    if (tipo && !isNaN(total)) quesitoMap.set(tipo, (quesitoMap.get(tipo) || 0) + total);
+  const filas = items.map(it => {
+    const fila = new Array(CABECERAS.length).fill('');
+    fila[C.ID]         = idRecibo;
+    fila[C.TS]         = ahora;
+    fila[C.ESTACION]   = datos.estacion || '';
+    fila[C.TIPO]       = it.tipo;
+    fila[C.LITROS]     = it.litros;
+    fila[C.PRECIO]     = it.precio_litro;
+    fila[C.TOTAL]      = it.total;
+    fila[C.KM_TOTAL]   = kmTotales;
+    fila[C.LEC_GLP]    = vacio(num(datos.lecturaGLP));
+    fila[C.LEC_GAS]    = vacio(num(datos.lecturaGasolina));
+    fila[C.CONS_COCHE] = vacio(num(esGLP(it.tipo) ? datos.consumoCocheGLP : datos.consumoCocheGasolina));
+    fila[C.RECIBO]     = urlRecibo;
+    return fila;
   });
 
-  const fechasOrdenadas = Array.from(fechasMap.values()).sort((a, b) => a.dateObj - b.dateObj);
+  const inicio = hoja.getLastRow() + 1;
+  asegurarTamano(hoja, inicio + filas.length - 1, CABECERAS.length);
+  hoja.getRange(inicio, 1, filas.length, CABECERAS.length).setValues(filas);
+  SpreadsheetApp.flush();
 
-  const series = tiposUnicos.map(tipo => ({
-    tipo,
-    precios: fechasOrdenadas.map(f => f.valores[tipo] ? f.valores[tipo].precio : null),
-    costesKM: fechasOrdenadas.map(f => f.valores[tipo] ? f.valores[tipo].costeKM : null)
-  }));
+  const resumen = recalcularTodo();
 
   return {
-    fechas: fechasOrdenadas.map(f => Utilities.formatDate(f.dateObj, 'GMT', 'dd/MM/yyyy')),
-    series,
-    quesito: Array.from(quesitoMap.entries()).map(([tipo, total]) => ({ tipo, total }))
+    ok: true,
+    idRecibo,
+    avisoDrive: urlRecibo ? '' : 'La foto no se guardó en Drive.',
+    avisos: (resumen.avisos || []).filter(a => a.id === idRecibo),
+    ultimo: resumen.ultimo,
+    items: items.map(i => ({ tipo: i.tipo, litros: i.litros, total: i.total }))
   };
 }
 
-// ---------- LEGACY: por si quieres mantener el Form en paralelo ----------
+function vacio(v) { return v === null || v === undefined ? '' : v; }
 
-function procesarTicket(e) {
-  const km = e.namedValues['KM actuales del coche.'][0];
-  const urlsImagen = e.namedValues['Recibo del repostaje.'][0];
-  const timestamp = e.namedValues['Marca temporal'][0];
-  const fileId = urlsImagen.split('id=')[1];
-  const file = DriveApp.getFileById(fileId);
-  const base64Image = Utilities.base64Encode(file.getBlob().getBytes());
-  registrarRepostaje(km, base64Image, file.getMimeType(), timestamp);
+// ============================================================
+//  MOTOR DE CÁLCULO
+// ============================================================
+
+/** Recorrido de un combustible en un tramo, a partir de la lectura del coche. */
+function tramoDeContador(lecturaActual, lecturaPrevia) {
+  if (lecturaActual === null) return null;
+  if (CONTADORES_SE_RESETEAN) return lecturaActual;          // la lectura ES el tramo
+  if (lecturaPrevia === null) return null;
+  return lecturaActual >= lecturaPrevia ? lecturaActual - lecturaPrevia : lecturaActual;
 }
 
-// Mantén tal cual tus funciones actualizarDashboard() y onEdit() del script original
-// si quieres conservar el dashboard de Sheets como respaldo de escritorio.
+/**
+ * Recalcula tramos, acumulados por combustible, consumos y costes de toda la hoja.
+ * Devuelve un resumen con los avisos de coherencia detectados.
+ */
+function recalcularTodo() {
+  const hoja = getHoja();
+  const ultima = hoja.getLastRow();
+  if (ultima < 2) return { avisos: [], ultimo: null };
+
+  const rango = hoja.getRange(2, 1, ultima - 1, CABECERAS.length);
+  const filas = rango.getValues();
+
+  // Agrupamos por ticket conservando el orden de aparición
+  const orden = [], porId = {};
+  filas.forEach((f, i) => {
+    const id = f[C.ID];
+    if (!id) return;
+    if (!porId[id]) { porId[id] = []; orden.push(id); }
+    porId[id].push(i);
+  });
+
+  let previo = null;          // ticket anterior
+  let accGLP = 0, accGas = 0; // km acumulados desde el último repostaje de cada combustible
+  // El acumulado solo sirve si conocemos TODOS los tramos desde ese repostaje.
+  // Si en algún tramo falta la lectura, el consumo de ese depósito no es calculable.
+  let completoGLP = false, completoGas = false;
+  let vistoGLP = false, vistoGas = false;
+  const avisos = [];
+
+  orden.forEach(id => {
+    const idx = porId[id];
+    const ref = filas[idx[0]];
+
+    const kmTotal   = num(ref[C.KM_TOTAL]);
+    const lecGLP    = num(ref[C.LEC_GLP]);
+    const lecGas    = num(ref[C.LEC_GAS]);
+
+    const kmTramo   = (kmTotal !== null && previo && previo.kmTotal !== null) ? kmTotal - previo.kmTotal : null;
+    const tramoGLP  = tramoDeContador(lecGLP, previo ? previo.lecGLP : null);
+    const tramoGas  = tramoDeContador(lecGas, previo ? previo.lecGas : null);
+
+    // Aviso de coherencia: los km de los dos combustibles deberían cuadrar con el tramo
+    if (kmTramo !== null && tramoGLP !== null && tramoGas !== null) {
+      const sumado = tramoGLP + tramoGas;
+      if (kmTramo > 0 && Math.abs(sumado - kmTramo) > kmTramo * 0.15) {
+        avisos.push({
+          id,
+          texto: 'Los km por combustible (' + Math.round(sumado) + ') no cuadran con el tramo (' +
+                 Math.round(kmTramo) + '). ¿Olvidaste resetear algún parcial?'
+        });
+      }
+    }
+
+    if (tramoGLP === null) completoGLP = false; else accGLP += tramoGLP;
+    if (tramoGas === null) completoGas = false; else accGas += tramoGas;
+
+    // ¿Qué combustibles trae este ticket?
+    const traeGLP = idx.some(i => esGLP(filas[i][C.TIPO]));
+    const traeGas = idx.some(i => !esGLP(filas[i][C.TIPO]));
+
+    // El consumo solo sale si el depósito estaba lleno al principio de la ventana
+    // (hubo un repostaje previo de ese combustible) y conocemos todos sus tramos.
+    const fiableGLP = traeGLP && vistoGLP && completoGLP && accGLP > 0;
+    const fiableGas = traeGas && vistoGas && completoGas && accGas > 0;
+
+    idx.forEach(i => {
+      const f = filas[i];
+      const glp = esGLP(f[C.TIPO]);
+      const fiable = glp ? fiableGLP : fiableGas;
+      const kmCalc = fiable ? (glp ? accGLP : accGas) : null;
+      const litros = num(f[C.LITROS]);
+      const total  = num(f[C.TOTAL]);
+      const precio = num(f[C.PRECIO]);
+      const consCoche = num(f[C.CONS_COCHE]);
+
+      f[C.KM_TRAMO] = vacio(kmTramo);
+      f[C.KM_GLP]   = vacio(tramoGLP);
+      f[C.KM_GAS]   = vacio(tramoGas);
+      f[C.KM_CALC]  = vacio(kmCalc);
+
+      f[C.CONS_REAL]   = vacio(fiable && litros ? redondear((litros / kmCalc) * 100, 2) : null);
+      f[C.COSTE_REAL]  = vacio(fiable && total  ? redondear(total / kmCalc, 4) : null);
+      f[C.COSTE_COCHE] = vacio(consCoche && precio ? redondear((precio * consCoche) / 100, 4) : null);
+    });
+
+    if (traeGLP) { accGLP = 0; completoGLP = true; vistoGLP = true; }
+    if (traeGas) { accGas = 0; completoGas = true; vistoGas = true; }
+
+    previo = { kmTotal, lecGLP, lecGas };
+  });
+
+  rango.setValues(filas);
+  SpreadsheetApp.flush();
+
+  return {
+    avisos,
+    ultimo: previo,
+    pendientes: { kmGLPSinRepostar: accGLP, kmGasolinaSinRepostar: accGas }
+  };
+}
+
+// ============================================================
+//  LECTURA DE LA HOJA
+// ============================================================
+
+function getHoja() {
+  const libro = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = libro.getSheetByName(HOJA_DATOS);
+  if (!hoja) {
+    for (const s of libro.getSheets()) {
+      if (s.getRange('A1').getValue() === 'ID') { hoja = s; break; }
+    }
+  }
+  if (!hoja) throw new Error("No encuentro la hoja de datos (A1 debe contener 'ID').");
+  asegurarTamano(hoja, 0, CABECERAS.length);
+  return hoja;
+}
+
+function asegurarTamano(hoja, filasNecesarias, columnasNecesarias) {
+  if (columnasNecesarias > hoja.getMaxColumns()) {
+    hoja.insertColumnsAfter(hoja.getMaxColumns(), columnasNecesarias - hoja.getMaxColumns());
+  }
+  if (filasNecesarias > hoja.getMaxRows()) {
+    hoja.insertRowsAfter(hoja.getMaxRows(), filasNecesarias - hoja.getMaxRows());
+  }
+}
+
+function leerFilas() {
+  const hoja = getHoja();
+  const ultima = hoja.getLastRow();
+  if (ultima < 2) return [];
+  return hoja.getRange(2, 1, ultima - 1, CABECERAS.length).getValues().filter(r => r[C.ID] !== '');
+}
+
+function ultimoTicket() {
+  const filas = leerFilas();
+  if (!filas.length) return null;
+  const f = filas[filas.length - 1];
+  return { id: f[C.ID], kmTotales: num(f[C.KM_TOTAL]), lecturaGLP: num(f[C.LEC_GLP]), lecturaGas: num(f[C.LEC_GAS]) };
+}
+
+function resumenUltimoTicket() {
+  const t = ultimoTicket();
+  if (!t) return null;
+  return { kmTotales: t.kmTotales, lecturaGLP: t.lecturaGLP, lecturaGasolina: t.lecturaGas };
+}
+
+function listaEstaciones() {
+  const set = {};
+  leerFilas().forEach(f => { if (f[C.ESTACION]) set[f[C.ESTACION]] = true; });
+  return Object.keys(set).sort();
+}
+
+// ============================================================
+//  DASHBOARD
+// ============================================================
+
+function getDashboardData() {
+  const registros = leerFilas().map(f => {
+    const fecha = f[C.TS] instanceof Date ? f[C.TS] : new Date(f[C.TS]);
+    return {
+      id: f[C.ID],
+      fecha: isNaN(fecha.getTime()) ? String(f[C.TS]) : Utilities.formatDate(fecha, ZONA, 'yyyy-MM-dd'),
+      estacion: f[C.ESTACION] || 'Sin estación',
+      tipo: f[C.TIPO],
+      litros: num(f[C.LITROS]),
+      precio: num(f[C.PRECIO]),
+      total: num(f[C.TOTAL]),
+      kmTotales: num(f[C.KM_TOTAL]),
+      kmTramo: num(f[C.KM_TRAMO]),
+      kmGLP: num(f[C.KM_GLP]),
+      kmGas: num(f[C.KM_GAS]),
+      kmCalculo: num(f[C.KM_CALC]),
+      lecturaGLP: num(f[C.LEC_GLP]),
+      lecturaGas: num(f[C.LEC_GAS]),
+      consumoCoche: num(f[C.CONS_COCHE]),
+      consumoReal: num(f[C.CONS_REAL]),
+      costeKmReal: num(f[C.COSTE_REAL]),
+      costeKmCoche: num(f[C.COSTE_COCHE]),
+      recibo: f[C.RECIBO] || ''
+    };
+  });
+
+  return {
+    registros,
+    estaciones: listaEstaciones(),
+    actualizado: Utilities.formatDate(new Date(), ZONA, 'dd/MM/yyyy HH:mm')
+  };
+}
+
+// ============================================================
+//  MANTENIMIENTO
+// ============================================================
+
+function probarDrive() {
+  const r = diagnosticoDrive();
+  console.log(JSON.stringify(r, null, 2));
+  try { SpreadsheetApp.getUi().alert(r.ok ? '✅ Drive OK\n\n' + r.detalle : '❌ Drive KO\n\n' + r.detalle); } catch (e) {}
+  return r;
+}
+
+function diagnosticoDrive() {
+  try {
+    if (!CARPETA_RECIBOS_ID) return { ok: false, detalle: 'CARPETA_RECIBOS_ID está vacío en las propiedades del script.' };
+    const carpeta = DriveApp.getFolderById(CARPETA_RECIBOS_ID);
+    const test = carpeta.createFile(Utilities.newBlob('prueba RefuelControl', 'text/plain', '_test_refuel.txt'));
+    test.setTrashed(true);
+    return { ok: true, detalle: 'Carpeta: ' + carpeta.getName() + '\nEscritura correcta.' };
+  } catch (err) {
+    return { ok: false, detalle: err.message };
+  }
+}
+
+/** Añade la columna S a una hoja que ya tenga el esquema de 18 columnas. */
+function actualizarEsquema() {
+  const hoja = getHoja();
+  hoja.getRange(1, 1, 1, CABECERAS.length).setValues([CABECERAS])
+      .setFontWeight('bold').setBackground('#1E1E1E').setFontColor('#FFFFFF');
+  hoja.setFrozenRows(1);
+  const r = recalcularTodo();
+  try {
+    SpreadsheetApp.getUi().alert(
+      'Esquema actualizado y hoja recalculada.\n\n' +
+      (r.avisos.length ? 'Avisos:\n' + r.avisos.map(a => '· ' + a.texto).join('\n')
+                       : 'Sin avisos de coherencia.')
+    );
+  } catch (e) {}
+  return r;
+}
+
+/** Migración del esquema antiguo de 11 columnas. Solo se ejecuta una vez. */
+function migrarEsquema() {
+  const libro = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = getHoja();
+  const ui = SpreadsheetApp.getUi();
+
+  if (hoja.getRange(1, 3).getValue() === 'Estación') {
+    ui.alert('Esta hoja ya está migrada.\n\nUsa «Actualizar esquema» o «Recalcular todo».');
+    return;
+  }
+
+  const backup = hoja.copyTo(libro);
+  backup.setName('Backup_' + Utilities.formatDate(new Date(), ZONA, 'yyyyMMdd_HHmm'));
+  backup.hideSheet();
+
+  const ultima = hoja.getLastRow();
+  const viejas = ultima >= 2 ? hoja.getRange(2, 1, ultima - 1, 11).getValues() : [];
+
+  const nuevas = viejas.filter(v => v[0] !== '').map(v => {
+    const fila = new Array(CABECERAS.length).fill('');
+    fila[C.ID]       = v[0];
+    fila[C.TS]       = v[1];
+    fila[C.TIPO]     = normalizarTipo(v[3]);
+    fila[C.LITROS]   = vacio(num(v[4]));
+    fila[C.PRECIO]   = vacio(num(v[5]));
+    fila[C.TOTAL]    = vacio(num(v[6]));
+    fila[C.KM_TOTAL] = vacio(num(v[2]));
+    fila[C.RECIBO]   = v[10] || '';
+    return fila;
+  });
+
+  hoja.clear();
+  hoja.setName(HOJA_DATOS);
+  hoja.getRange(1, 1, 1, CABECERAS.length).setValues([CABECERAS])
+      .setFontWeight('bold').setBackground('#1E1E1E').setFontColor('#FFFFFF');
+  hoja.setFrozenRows(1);
+  if (nuevas.length) hoja.getRange(2, 1, nuevas.length, CABECERAS.length).setValues(nuevas);
+
+  recalcularTodo();
+  ui.alert('Migración completada: ' + nuevas.length + ' filas.\nCopia de seguridad: ' + backup.getName());
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('⛽ RefuelControl')
+    .addItem('Probar acceso a Drive', 'probarDrive')
+    .addItem('Recalcular todo', 'recalcularTodo')
+    .addSeparator()
+    .addItem('Actualizar esquema', 'actualizarEsquema')
+    .addItem('Migrar esquema antiguo', 'migrarEsquema')
+    .addToUi();
+}

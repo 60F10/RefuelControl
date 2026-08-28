@@ -1,13 +1,11 @@
-// Sube este número cada vez que toques index.html, o el móvil seguirá
-// sirviendo la versión antigua desde la caché.
-const CACHE = 'repostajes-v2';
+// Sube este número si quieres forzar el borrado de la caché en los móviles.
+// Para un cambio normal en index.html no hace falta: la estrategia es "red primero".
+const CACHE = 'repostajes-v3';
 const ESTATICOS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE)
-      .then(c => c.addAll(ESTATICOS))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(c => c.addAll(ESTATICOS)).then(() => self.skipWaiting())
   );
 });
 
@@ -21,9 +19,12 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const req = e.request;
+  const url = new URL(req.url);
 
-  // Solo gestionamos GET del propio sitio: las llamadas al Apps Script van directas.
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  // Fuera del alcance del service worker: otros dominios, escrituras y la API.
+  if (req.method !== 'GET') return;
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/.netlify/')) return;
 
   // Red primero, caché como red de seguridad cuando no hay cobertura.
   e.respondWith(

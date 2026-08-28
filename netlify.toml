@@ -1,0 +1,21 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# La PWA llama a /api/... y Netlify lo dirige a la función, que añade el token
+# y reenvía la petición al Apps Script.
+[[redirects]]
+  from = "/api/repostaje"
+  to = "/.netlify/functions/repostaje"
+  status = 200
+  force = true
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"

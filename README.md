@@ -1,204 +1,163 @@
-# RefuelControl_60F10
+# RefuelControl
 
-## Objetivo del Proyecto
+PWA para registrar los repostajes de un coche **bífuel GLP + gasolina** (Dacia Sandero Stepway ECO-G 120).
 
-RefuelControl_60F10 es una aplicación progresiva web (PWA) para gestionar y registrar repostajes de vehículos de forma eficiente. La aplicación permite:
+Haces una foto del ticket, la IA extrae los datos, tú los revisas y se guardan en Google Sheets. El dashboard vive dentro de la propia app.
 
-- Capturar recibos de gasolinera mediante foto
-- Procesar automáticamente la información del recibo usando IA (Google Gemini)
-- Almacenar datos de repostaje en Google Sheets
-- Acceder a la aplicación offline y sincronizar cuando hay conexión
-- Mantener un registro completo y automatizado de costos de combustible
-
-![Captura de la Aplicación](CapturaAplicacion.png)
+**Demo:** https://repostajesgofio.netlify.app/
 
 ---
 
-## Arquitectura de Seguridad
+## Qué resuelve
 
-La aplicación implementa una arquitectura segura de tres capas:
+En un coche bífuel el consumo no se puede repartir: si llenas 40 L de GLP y 30 L de gasolina en el mismo ticket, no sabes cuántos kilómetros hiciste con cada uno. La mayoría de apps de repostajes lo estiman y el número sale mal.
 
-```
-┌─────────────────────┐
-│   Frontend (PWA)    │
-│  HTML/CSS/JavaScript│
-└──────────┬──────────┘
-           │
-           │ Request seguro con token
-           ↓
-┌─────────────────────┐
-│ Netlify Function    │
-│  (Backend)          │
-└──────────┬──────────┘
-           │
-           │ Llamada a Google Apps Script
-           ↓
-┌──────────────────────┐
-│ Google Apps Script   │
-│ (Lógica de Negocio)  │
-│ - API Gemini         │
-│ - Google Sheets      │
-│ - Google Drive       │
-└──────────────────────┘
-```
-
-### Flujo de Seguridad
-
-1. **Frontend (Cliente)**
-   - La PWA se ejecuta en el navegador del usuario
-   - Captura datos y envía peticiones a Netlify Function
-   - Incluye un token compartido en las cabeceras
-
-2. **Netlify Function (Backend)**
-   - Valida el token SHARED_TOKEN para autorizar la petición
-   - Recibe la URL del script de Google Apps Script
-   - Reenvía la solicitud de forma segura
-   - Protege las credenciales de Google
-
-3. **Google Apps Script (Servidor de Datos)**
-   - Recibe la petición de Netlify Function
-   - Procesa imágenes con la API de Google Gemini
-   - Escribe datos en Google Sheets
-   - Guarda recibos en Google Drive
+Aquí introduces los dos parciales que da el ordenador de a bordo, y el cálculo se hace contra los kilómetros reales de cada combustible, acumulados desde la última vez que llenaste **ese** depósito.
 
 ---
 
-## Guía de Despliegue
+## Funciona así
 
-### 1. Despliegue en Netlify
-
-#### Configuración de Variables de Entorno
-
-1. Accede a tu sitio en [Netlify Dashboard](https://app.netlify.com/)
-2. Ve a **Site configuration** → **Environment variables**
-3. Añade las siguientes variables:
-
-| Variable | Descripción | Ejemplo |
-|----------|-------------|---------|
-| `GOOGLE_SCRIPT_URL` | URL de despliegue de tu Google Apps Script | `https://script.google.com/macros/d/{SCRIPT_ID}/usercopy` |
-| `SHARED_TOKEN` | Token de autenticación compartido | `tu_token_secreto_largo_aqui` |
-
-#### Pasos:
-
-1. En la interfaz de Site configuration, haz clic en **Environment variables**
-2. Haz clic en **Edit variables**
-3. Añade:
-   - **Key:** `GOOGLE_SCRIPT_URL` | **Value:** `[Tu URL de Google Apps Script]`
-   - **Key:** `SHARED_TOKEN` | **Value:** `[Tu token seguro]`
-4. Haz clic en **Save**
-5. Despliega de nuevo tu sitio para que los cambios surtan efecto
-
-**⚠️ Importante:** Usa un token fuerte y aleatorio. Ejemplo:
 ```
-SHARED_TOKEN=abc123def456ghi789jkl012mno345pqr678stu901vwx
+[Móvil] KM + parciales + foto del ticket
+   │  la foto se reduce a 1400 px en el propio móvil (los HEIC del iPhone pasan a JPEG)
+   ▼
+[Netlify Function]  añade la URL del backend y el token, que nunca llegan al navegador
+   ▼
+[Apps Script]  guarda la foto en Drive → Gemini 2.5 Flash lee el ticket
+   ▼
+[Móvil] revisas estación, litros y precios, y corriges lo que haga falta
+   ▼
+[Apps Script]  escribe una fila por combustible y recalcula toda la hoja
+   ▼
+[Móvil] el dashboard se repinta con Chart.js
 ```
 
 ---
 
-### 2. Despliegue en Google Apps Script
+## Stack
 
-#### Configuración de Propiedades del Script
+| Capa | Tecnología |
+|---|---|
+| Front | HTML + CSS + JS sin framework, Chart.js por CDN, PWA con service worker |
+| Hosting | Netlify |
+| Proxy | Netlify Function (Node) — guarda las claves |
+| Backend | Google Apps Script desplegado como aplicación web |
+| IA | Gemini 2.5 Flash (visión) |
+| Datos | Google Sheets |
+| Ficheros | Google Drive |
 
-1. Abre tu proyecto en [Google Apps Script](https://script.google.com/)
-2. Ve a **Configuración** → **Propiedades del script** (o busca el ícono de engranaje ⚙️)
-3. Añade las siguientes propiedades de secuencia:
-
-| Propiedad | Descripción | Ejemplo |
-|-----------|-------------|---------|
-| `GEMINI_API_KEY` | Clave de API de Google Gemini | `AIzaSyD...` |
-| `CARPETA_RECIBOS_ID` | ID de la carpeta de Google Drive donde guardar recibos | `1a2b3c4d5e6f7g8h9i0j` |
-| `SHARED_TOKEN` | Token de autenticación (debe coincidir con Netlify) | `abc123def456ghi789jkl012mno345pqr678stu901vwx` |
-
-#### Pasos Detallados:
-
-1. **Abre el Editor de Google Apps Script**
-   - Ve a [script.google.com](https://script.google.com)
-   - Abre tu proyecto
-
-2. **Accede a Propiedades del Script**
-   - Haz clic en el ícono de **engranaje ⚙️** (Configuración) en la barra lateral izquierda
-   - Selecciona **Propiedades del script**
-
-3. **Añade cada propiedad:**
-
-   **Para GEMINI_API_KEY:**
-   - **Propiedad:** `GEMINI_API_KEY`
-   - **Valor:** Tu clave de API de Google Gemini
-   - [Obtén tu clave aquí](https://aistudio.google.com/apikey)
-
-   **Para CARPETA_RECIBOS_ID:**
-   - **Propiedad:** `CARPETA_RECIBOS_ID`
-   - **Valor:** El ID de la carpeta de Google Drive
-   - [Cómo obtener el ID de la carpeta](https://webapps.stackexchange.com/questions/166657/how-do-i-get-a-google-drive-folder-id)
-
-   **Para SHARED_TOKEN:**
-   - **Propiedad:** `SHARED_TOKEN`
-   - **Valor:** El mismo token que configuraste en Netlify
-   - Asegúrate de que coincida exactamente
-
-4. **Guarda los cambios**
-   - Haz clic en **Guardar** o presiona `Ctrl + S`
-
-5. **Despliega tu script**
-   - Ve a **Desplegar** → **Nueva implementación**
-   - Selecciona tipo: **API ejecutable**
-   - Haz clic en **Desplegar**
-   - Copia la URL de despliegue (será similar a: `https://script.google.com/macros/d/{SCRIPT_ID}/usercopy`)
-   - Esta URL es tu `GOOGLE_SCRIPT_URL` para Netlify
-
-#### Acceso a las Propiedades en el Código
-
-En tu código de Google Apps Script, accede a las propiedades así:
-
-```javascript
-const GEMINI_API_KEY = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-const CARPETA_RECIBOS_ID = PropertiesService.getScriptProperties().getProperty('CARPETA_RECIBOS_ID');
-const SHARED_TOKEN = PropertiesService.getScriptProperties().getProperty('SHARED_TOKEN');
-```
+Sin base de datos propia, sin servidor que mantener y con coste cero dentro de las capas gratuitas.
 
 ---
 
-## Checklist de Despliegue
+## Montarlo desde cero
 
-- [ ] **Google Apps Script:** Crear/obtener las 3 propiedades del script
-- [ ] **Google Apps Script:** Obtener GEMINI_API_KEY de Google AI Studio
-- [ ] **Google Apps Script:** Obtener CARPETA_RECIBOS_ID de Google Drive
-- [ ] **Google Apps Script:** Desplegar el script como API ejecutable
-- [ ] **Netlify:** Añadir variable `GOOGLE_SCRIPT_URL` (URL de despliegue)
-- [ ] **Netlify:** Añadir variable `SHARED_TOKEN` (mismo token que en Google Apps Script)
-- [ ] **Netlify:** Redeploy del sitio
-- [ ] **Prueba:** Verificar que la aplicación se conecta correctamente
-- [ ] **Seguridad:** Cambiar tokens en producción si es necesario
+### 1. Google Sheets y Apps Script
+
+1. Crea una hoja de cálculo. En la primera pestaña, pon `ID` en la celda **A1**: el script localiza la hoja por ese valor.
+2. **Extensiones → Apps Script** y pega el contenido de `Script.Repostaje.gs`.
+3. **Configuración del proyecto → Propiedades del script**, y añade:
+
+   | Propiedad | Valor |
+   |---|---|
+   | `GEMINI_API_KEY` | tu clave de [Google AI Studio](https://aistudio.google.com/apikey) |
+   | `SHARED_TOKEN` | una cadena larga y aleatoria que inventes |
+   | `CARPETA_RECIBOS_ID` | el ID de la carpeta de Drive donde guardar los tickets |
+
+4. Marca **Mostrar el archivo de manifiesto `appsscript.json`** y añade los permisos:
+
+   ```json
+   "oauthScopes": [
+     "https://www.googleapis.com/auth/drive",
+     "https://www.googleapis.com/auth/spreadsheets",
+     "https://www.googleapis.com/auth/script.external_request",
+     "https://www.googleapis.com/auth/script.container.ui"
+   ]
+   ```
+
+   Sin `auth/drive` el script guarda los datos pero no las fotos, y falla en silencio.
+
+5. Recarga la hoja y usa el menú **⛽ RefuelControl → Probar acceso a Drive**. Acepta los permisos. Debe responder `ok: true`.
+6. **Implementar → Nueva implementación → Aplicación web**, con `Ejecutar como: Yo` y `Acceso: Cualquiera`. Copia la URL `/exec`.
+
+### 2. Netlify
+
+1. Conecta este repositorio a un sitio de Netlify. No hace falta comando de build.
+2. **Site configuration → Environment variables**:
+
+   | Variable | Valor |
+   |---|---|
+   | `GOOGLE_SCRIPT_URL` | la URL `/exec` del paso anterior |
+   | `SHARED_TOKEN` | el mismo valor que pusiste en Apps Script |
+
+3. Despliega.
+
+El `netlify.toml` ya redirige `/api/repostaje` a la función. El front no contiene ninguna clave, así que el repositorio puede ser público.
+
+### 3. Instalar en el móvil
+
+- **Android:** Chrome → menú → *Añadir a pantalla de inicio*.
+- **iPhone:** Safari → compartir → *Añadir a pantalla de inicio*. Tiene que ser Safari.
 
 ---
 
-## Funcionalidades
+## Esquema de la hoja
 
-✅ Captura de recibos mediante cámara
-✅ Procesamiento automático con IA (Google Gemini)
-✅ Almacenamiento en Google Sheets
-✅ Sincronización offline con Service Worker
-✅ Arquitectura segura de tres capas
-✅ Variables de entorno protegidas
-✅ Interfaz PWA responsive
+Una fila por combustible. Un ticket bífuel genera dos filas con el mismo ID.
+
+| Col | Campo | Origen |
+|---|---|---|
+| A | ID | automático |
+| B | Timestamp | automático |
+| C | Estación | Gemini, editable |
+| D | Tipo Combustible | Gemini, editable |
+| E | Litros | Gemini, editable |
+| F | Precio por Litro (€) | Gemini, editable |
+| G | Total Invertido (€) | Gemini, editable |
+| H | KM Totales | manual |
+| I | KM Recorridos (tramo) | calculado |
+| J | Lectura KM GLP (coche) | manual |
+| K | Lectura KM Gasolina (coche) | manual |
+| L | KM GLP (tramo) | calculado |
+| M | KM Gasolina (tramo) | calculado |
+| N | Consumo coche (L/100km) | manual |
+| O | Consumo real (L/100km) | calculado |
+| P | Coste por KM real (€/km) | calculado |
+| Q | Coste por KM coche (€/km) | calculado |
+| R | Enlace Recibo | automático |
+| S | KM de este combustible desde su último repostaje | calculado |
+
+La hoja guarda valores, no fórmulas. `recalcularTodo()` regenera todas las columnas calculadas a partir de los datos de entrada.
 
 ---
 
-## Tecnologías Utilizadas
+## Cómo se calcula el consumo
 
-- **Frontend:** HTML5, CSS3, JavaScript
-- **Backend:** Netlify Functions
-- **Servidor:** Google Apps Script
-- **IA:** Google Gemini API
-- **Almacenamiento:** Google Sheets + Google Drive
-- **PWA:** Service Worker para funcionalidad offline
+El método es tanque a tanque: cuando repostas un combustible llenas ese depósito, así que los litros de este repostaje son exactamente los que gastaste desde el anterior.
 
----
+- **Tramo de un combustible** = la lectura del parcial del coche, porque los parciales se resetean después de cada repostaje. Si no los reseteas, cambia `CONTADORES_SE_RESETEAN` a `false` y el tramo pasa a ser la diferencia entre lecturas.
+- **KM del cálculo** = suma de los tramos de ese combustible desde la última vez que se repostó. Necesario porque no siempre se repostan los dos: puedes llenar solo GLP tres veces seguidas mientras la gasolina sigue acumulando kilómetros.
+- **Consumo real** = litros ÷ km del cálculo × 100.
+- **Coste por km real** = euros ÷ km del cálculo.
+- **Consumo coche** y **coste por km coche** salen de lo que marca el ordenador de a bordo, y sirven para contrastar. El dashboard tiene un interruptor entre las dos versiones.
 
-## Soporte y Contacto
-
-Para reportar problemas o sugerencias, contacta al equipo de desarrollo.
+Cuando falta algún parcial de la ventana, el consumo se deja vacío en lugar de inventar un número. También aparece un aviso si los km de los dos combustibles no cuadran con el tramo total, que suele significar un parcial sin resetear.
 
 ---
 
-**Última actualización:** Junio 2026
+## El dashboard
+
+Indicadores de odómetro, gasto total, kilómetros y euros por combustible, coste por kilómetro de cada uno, cuántas veces sale más barato el GLP y el ahorro acumulado frente a haber ido solo con gasolina.
+
+Gráficos de inversión y kilómetros por combustible, evolución del coste por kilómetro, del consumo y del precio por litro, precio medio por estación y gasto mensual.
+
+---
+
+## Aviso
+
+Es un proyecto personal, pensado para un coche y un conductor. Funciona, pero no tiene tests, ni multiusuario, ni cuenta con que dos personas escriban a la vez. Cógelo como punto de partida.
+
+## Licencia
+
+MIT.
