@@ -1,5 +1,5 @@
 /**
- * Lanza los dos bancos de pruebas.
+ * Lanza los tres bancos de pruebas.
  *
  *   node test/run.js      (o npm test)
  */
@@ -7,7 +7,7 @@
 const { execFileSync } = require('child_process');
 const path = require('path');
 
-const bancos = ['motor.test.js', 'dashboard.test.js'];
+const bancos = ['motor.test.js', 'dashboard.test.js', 'rutas.test.js'];
 let fallo = false;
 
 bancos.forEach(b => {

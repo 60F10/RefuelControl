@@ -6,6 +6,8 @@ Haces una foto del ticket, la IA extrae los datos, tú los revisas y se guardan 
 
 **Demo:** https://repostajesgofio.netlify.app/
 
+![Los módulos de la app](img/Screenshots/modulos.png)
+
 ---
 
 ## Qué resuelve
@@ -50,6 +52,24 @@ Aquí introduces los dos parciales que da el ordenador de a bordo, y el cálculo
 | Ficheros | Google Drive |
 
 Sin base de datos propia, sin servidor que mantener y con coste cero dentro de las capas gratuitas.
+
+---
+
+## Qué hay en el repo
+
+```
+index.html              La app entera: HTML, CSS y JS en un archivo
+Script.Repostaje.gs     Backend de Apps Script, para pegar en el editor
+appsscript.json         Manifiesto del script: zona horaria y permisos
+manifest.json           Manifiesto de la PWA
+sw.js                   Service worker, estrategia red primero
+netlify.toml            Publicación y redirección de /api
+netlify/functions/      El proxy que guarda la URL del backend y el token
+img/                    Iconos de la PWA y capturas de pantalla
+test/                   Bancos de pruebas y prueba de humo en Chromium
+```
+
+Si mueves los iconos, hay que cambiar la ruta en tres sitios: el `apple-touch-icon` de `index.html`, el array `icons` de `manifest.json` y la lista `ESTATICOS` de `sw.js`.
 
 ---
 
@@ -164,14 +184,42 @@ Las medias del dashboard van **ponderadas por kilómetros**: el €/km de un com
 
 Seis módulos en un carril horizontal con `scroll-snap`, así que el deslizamiento lo resuelve el navegador y en iOS va como una app nativa. Abajo, una barra de pestañas; en escritorio funcionan además las flechas del teclado y unos botones laterales, y el contenido se queda en una columna centrada en lugar de estirarse. Los gráficos de cada módulo se dibujan la primera vez que se entra.
 
-| Módulo | Qué lleva |
-|---|---|
-| Repostar | Estado de los depósitos, foto del ticket, datos del coche y revisión |
-| Resumen | KPI generales, rentabilidad, punto de equilibrio y ahorro |
-| Consumos | Consumo y €/km por combustible, evolución y gasto mensual |
-| Estaciones | Coste de oportunidad, ranking por desviación y precios |
-| Historial | Lista con el ticket, edición, borrado y exportación a CSV |
-| Curiosidades | Récords, proyección anual, CO₂ y comparación con la ficha |
+<table>
+  <tr>
+    <td width="33%" align="center">
+      <img src="img/Screenshots/SSNuevoRepostaje.png" alt="Módulo Repostar" width="100%"><br>
+      <b>Repostar</b><br>
+      <sub>Cuánto queda en los depósitos, foto del ticket y datos del coche</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="img/Screenshots/SSResumenGeneral.png" alt="Módulo Resumen" width="100%"><br>
+      <b>Resumen</b><br>
+      <sub>Odómetro, gasto, €/km, rentabilidad y punto de equilibrio</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="img/Screenshots/SSConsumosYCostes.png" alt="Módulo Consumos" width="100%"><br>
+      <b>Consumos</b><br>
+      <sub>Consumo y €/km de cada combustible, y su evolución</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" align="center">
+      <img src="img/Screenshots/SSEstaciones.png" alt="Módulo Estaciones" width="100%"><br>
+      <b>Estaciones</b><br>
+      <sub>Ranking real por desviación y coste de oportunidad</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="img/Screenshots/SSHistorial.png" alt="Módulo Historial" width="100%"><br>
+      <b>Historial</b><br>
+      <sub>Cada repostaje con su ticket, editable y exportable</sub>
+    </td>
+    <td width="33%" align="center">
+      <img src="img/Screenshots/SSCuriosidades.png" alt="Módulo Curiosidades" width="100%"><br>
+      <b>Curiosidades</b><br>
+      <sub>Récords, proyección del año, CO₂ y ficha técnica</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 

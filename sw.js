@@ -1,12 +1,29 @@
 // Sube este número si quieres forzar el borrado de la caché en los móviles.
 // Para un cambio normal en index.html no hace falta: la estrategia es "red primero".
-const CACHE = 'repostajes-v5';
-const ESTATICOS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+const CACHE = 'repostajes-v6';
+
+// Si mueves o renombras alguno de estos archivos, acuérdate de cambiarlo aquí.
+const ESTATICOS = [
+  './',
+  './index.html',
+  './manifest.json',
+  './img/icon-192.png',
+  './img/icon-512.png'
+];
 
 self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ESTATICOS)).then(() => self.skipWaiting())
-  );
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    // Uno a uno y sin rendirse: cache.addAll() es atómico, así que un solo 404
+    // (por ejemplo tras mover un icono) tumbaba la instalación entera del service
+    // worker y la app se quedaba sin funcionamiento offline, sin decir nada.
+    const fallos = [];
+    await Promise.all(ESTATICOS.map(ruta =>
+      cache.add(ruta).catch(err => fallos.push(ruta + ': ' + err.message))
+    ));
+    if (fallos.length) console.warn('[sw] no se pudieron cachear:', fallos);
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', e => {
