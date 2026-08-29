@@ -1,0 +1,14 @@
+{
+  "name": "refuelcontrol",
+  "version": "4.0.0",
+  "private": true,
+  "description": "PWA para registrar los repostajes de un Dacia Sandero Stepway ECO-G bífuel (GLP + gasolina)",
+  "scripts": {
+    "test": "node test/run.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/60F10/RefuelControl.git"
+  },
+  "license": "MIT"
+}

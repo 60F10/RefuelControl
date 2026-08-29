@@ -1,6 +1,9 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+  # El package.json solo sirve para lanzar las pruebas con Node. Aquí no se
+  # construye nada: los archivos se publican tal cual.
+  command = "echo 'Sitio estatico, sin build'"
 
 # La PWA llama a /api/... y Netlify lo dirige a la función, que añade el token
 # y reenvía la petición al Apps Script.

@@ -19,14 +19,15 @@ Aquí introduces los dos parciales que da el ordenador de a bordo, y el cálculo
 ## Funciona así
 
 ```
-[Móvil] KM + parciales + foto del ticket
+[Móvil] foto del ticket + KM y parciales del ordenador de a bordo
    │  la foto se reduce a 1400 px en el propio móvil (los HEIC del iPhone pasan a JPEG)
    ▼
 [Netlify Function]  añade la URL del backend y el token, que nunca llegan al navegador
    ▼
 [Apps Script]  guarda la foto en Drive → Gemini 2.5 Flash lee el ticket
    ▼
-[Móvil] revisas estación, litros y precios, y corriges lo que haga falta
+[Móvil] revisas fecha, estación, litros y precios, y marcas si llenaste el depósito
+   │  antes de enviar se valida el odómetro, los parciales y la coherencia del ticket
    ▼
 [Apps Script]  escribe una fila por combustible y recalcula toda la hoja
    ▼
@@ -127,8 +128,12 @@ Una fila por combustible. Un ticket bífuel genera dos filas con el mismo ID.
 | Q | Coste por KM coche (€/km) | calculado |
 | R | Enlace Recibo | automático |
 | S | KM de este combustible desde su último repostaje | calculado |
+| T | Depósito lleno | manual, marcado por defecto |
+| U | Fecha del ticket | Gemini, editable |
 
 La hoja guarda valores, no fórmulas. `recalcularTodo()` regenera todas las columnas calculadas a partir de los datos de entrada.
+
+Si vienes de una versión anterior, el menú **⛽ RefuelControl → Actualizar esquema** crea las columnas que falten, marca como llenos los repostajes ya registrados y recalcula la hoja. Es idempotente.
 
 ---
 
@@ -140,23 +145,43 @@ El método es tanque a tanque: cuando repostas un combustible llenas ese depósi
 - **KM del cálculo** = suma de los tramos de ese combustible desde la última vez que se repostó. Necesario porque no siempre se repostan los dos: puedes llenar solo GLP tres veces seguidas mientras la gasolina sigue acumulando kilómetros.
 - **Consumo real** = litros ÷ km del cálculo × 100.
 - **Coste por km real** = euros ÷ km del cálculo.
+- **Depósito lleno**: todo lo anterior asume que al repostar llenas ese depósito. Cuando echas una cantidad suelta, desmarcas la casilla y ese repostaje no cierra la ventana: sus litros y sus euros se suman al siguiente llenado, que es el único que puede dar un consumo honesto.
 - **Consumo coche** y **coste por km coche** salen de lo que marca el ordenador de a bordo, y sirven para contrastar. El dashboard tiene un interruptor entre las dos versiones.
 
 Cuando falta algún parcial de la ventana, el consumo se deja vacío en lugar de inventar un número. También aparece un aviso si los km de los dos combustibles no cuadran con el tramo total, que suele significar un parcial sin resetear.
+
+Las medias del dashboard van **ponderadas por kilómetros**: el €/km de un combustible es la suma de sus euros dividida entre la suma de sus kilómetros, no el promedio de los €/km de cada repostaje. Con la media aritmética, un tramo de 100 km pesaba igual que uno de 500 y el resultado se inclinaba hacia los tramos cortos.
 
 ---
 
 ## El dashboard
 
-Indicadores de odómetro, gasto total, kilómetros y euros por combustible, coste por kilómetro de cada uno, cuántas veces sale más barato el GLP y el ahorro acumulado frente a haber ido solo con gasolina.
+Indicadores de odómetro, gasto total, kilómetros y euros por combustible, coste por kilómetro de cada uno y cuántas veces sale más barato el GLP.
 
-Gráficos de inversión y kilómetros por combustible, evolución del coste por kilómetro, del consumo y del precio por litro, precio medio por estación y gasto mensual.
+**Punto de equilibrio**: con los consumos reales de los dos combustibles, hasta qué precio por litro compensa el GLP frente al precio de gasolina que pagas ahora mismo.
+
+**Ahorro con GLP**: la cifra medida sobre los kilómetros con consumo calculado y, debajo, la proyección a todos los kilómetros recorridos con GLP.
+
+Gráficos de inversión y kilómetros por combustible, evolución del coste por kilómetro, del consumo y del precio por litro, precio medio por estación y gasto mensual. El eje temporal es la lista de tickets, así que dos repostajes del mismo día se ven como dos puntos.
+
+El botón **CSV ↓** descarga el histórico entero, separado por punto y coma y con coma decimal, listo para abrir en Excel.
+
+---
+
+## Pruebas
+
+```bash
+npm test              # motor de cálculo y agregados del dashboard, sin dependencias
+node test/pantalla.js # prueba de humo en Chromium (necesita playwright y chart.js)
+```
+
+`test/motor.test.js` carga `Script.Repostaje.gs` con un Sheet simulado, así que prueba el código que se despliega, no una copia. `test/dashboard.test.js` extrae el `<script>` de `index.html` y comprueba los agregados con datos de ejemplo.
 
 ---
 
 ## Aviso
 
-Es un proyecto personal, pensado para un coche y un conductor. Funciona, pero no tiene tests, ni multiusuario, ni cuenta con que dos personas escriban a la vez. Cógelo como punto de partida.
+Es un proyecto personal, pensado para un coche y un conductor. No es multiusuario ni cuenta con que dos personas escriban a la vez. Cógelo como punto de partida.
 
 ## Licencia
 

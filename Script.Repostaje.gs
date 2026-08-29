@@ -1,17 +1,24 @@
 /**
- * RefuelControl_60F10 — Backend Apps Script  ·  v3
+ * RefuelControl_60F10 — Backend Apps Script  ·  v4
  * Dacia Sandero Stepway ECO-G 120 (bífuel GLP + gasolina)
  *
  * DESPLIEGUE (obligatorio tras cada cambio):
  *   Implementar > Gestionar implementaciones > lápiz > Versión: Nueva versión > Implementar
  *
+ * TRAS ACTUALIZAR A v4, una sola vez:
+ *   Menú ⛽ RefuelControl > Actualizar esquema
+ *   Crea las columnas T (Depósito lleno) y U (Fecha del ticket), marca como
+ *   llenos todos los repostajes anteriores y recalcula la hoja entera.
+ *
  * MODELO DE CÁLCULO
  *   Se resetean los contadores parciales después de cada repostaje, así que la
  *   lectura de cada contador ES el recorrido de ese tramo.
- *   Un depósito se llena entero cuando se reposta, pero no siempre se repostan
- *   los dos combustibles. Por eso el consumo de cada combustible se calcula
- *   contra los km acumulados de ESE combustible desde su último repostaje,
- *   no contra los del último ticket.
+ *   Un repostaje llena ese depósito entero salvo que se marque lo contrario,
+ *   pero no siempre se repostan los dos combustibles. Por eso el consumo de
+ *   cada combustible se calcula contra los km acumulados de ESE combustible
+ *   desde su último llenado, no contra los del último ticket.
+ *   Un repostaje parcial no cierra la ventana: sus litros y sus euros se
+ *   arrastran al siguiente llenado de ese mismo combustible.
  */
 
 // ============================================================
@@ -31,6 +38,7 @@ const CONTADORES_SE_RESETEAN = true;
 const HOJA_DATOS = 'Registro de Repostajes';
 const MODELO     = 'gemini-2.5-flash';
 const ZONA       = 'Atlantic/Canary';
+const VERSION    = '4.0';
 
 const CABECERAS = [
   'ID', 'Timestamp', 'Estación', 'Tipo Combustible', 'Litros',
@@ -38,15 +46,19 @@ const CABECERAS = [
   'KM Recorridos (tramo)', 'Lectura KM GLP (coche)', 'Lectura KM Gasolina (coche)',
   'KM GLP (tramo)', 'KM Gasolina (tramo)', 'Consumo coche (L/100km)',
   'Consumo real (L/100km)', 'Coste por KM real (€/km)', 'Coste por KM coche (€/km)',
-  'Enlace Recibo', 'KM de este combustible desde su último repostaje'
+  'Enlace Recibo', 'KM de este combustible desde su último repostaje',
+  'Depósito lleno', 'Fecha del ticket'
 ];
 
 const C = {
   ID: 0, TS: 1, ESTACION: 2, TIPO: 3, LITROS: 4, PRECIO: 5, TOTAL: 6,
   KM_TOTAL: 7, KM_TRAMO: 8, LEC_GLP: 9, LEC_GAS: 10, KM_GLP: 11, KM_GAS: 12,
   CONS_COCHE: 13, CONS_REAL: 14, COSTE_REAL: 15, COSTE_COCHE: 16, RECIBO: 17,
-  KM_CALC: 18
+  KM_CALC: 18, LLENO: 19, FECHA_TICKET: 20
 };
+
+const COL_LLENO = C.LLENO + 1;               // columna T, 1-indexada
+const COL_FECHA_TICKET = C.FECHA_TICKET + 1; // columna U, 1-indexada
 
 // ============================================================
 //  ENTRADA WEB APP
@@ -58,7 +70,8 @@ function doGet(e) {
     if (!e || e.parameter.token !== SHARED_TOKEN) return jsonOut({ ok: false, error: 'No autorizado' }, cb);
     switch (e.parameter.action) {
       case 'dashboard': return jsonOut(Object.assign({ ok: true }, getDashboardData()), cb);
-      case 'ping':      return jsonOut({ ok: true, version: '3.0', drive: diagnosticoDrive() }, cb);
+      case 'export':    return jsonOut(Object.assign({ ok: true }, exportarCSV()), cb);
+      case 'ping':      return jsonOut({ ok: true, version: VERSION, drive: diagnosticoDrive() }, cb);
       default:          return jsonOut({ ok: true, status: 'ok' }, cb);
     }
   } catch (err) {
@@ -136,6 +149,7 @@ function analizarTicket(body) {
     'Normaliza el producto: AUTOGAS, GLP o GAS -> "GLP"; cualquier 98 (DISAMax 98, Efitec 98, Nitro 98) -> "Gasolina 98"; ' +
     'cualquier 95 (Efitec 95, Star 95, sin plomo 95) -> "Gasolina 95".\n' +
     'En "estacion" pon el nombre comercial legible, por ejemplo "E.S. DISA Padre Anchieta". ' +
+    'La fecha del ticket es la del repostaje, no la de hoy. ' +
     'Un ticket puede traer uno o dos productos. Usa punto decimal. Sin texto fuera del JSON.';
 
   const payload = {
@@ -163,11 +177,13 @@ function analizarTicket(body) {
   }
   if (Array.isArray(datos)) datos = { estacion: '', items: datos };
 
+  const fecha = aFecha(datos.fecha_ticket);
+
   return {
     ok: true,
     estacion: datos.estacion || '',
     municipio: datos.municipio || '',
-    fechaTicket: datos.fecha_ticket || '',
+    fechaTicket: fecha ? Utilities.formatDate(fecha, ZONA, 'yyyy-MM-dd') : '',
     items: (datos.items || []).map(normalizarItem),
     estacionesConocidas: listaEstaciones(),
     ultimoRegistro: resumenUltimoTicket()
@@ -179,7 +195,8 @@ function normalizarItem(it) {
     tipo: normalizarTipo(it.tipo),
     litros: num(it.litros) || 0,
     precio_litro: num(it.precio_litro) || 0,
-    total: num(it.total) || 0
+    total: num(it.total) || 0,
+    lleno: it.lleno === undefined ? true : esLleno(it.lleno)
   };
 }
 
@@ -193,10 +210,44 @@ function normalizarTipo(t) {
 
 function esGLP(tipo) { return String(tipo).toUpperCase().indexOf('GLP') >= 0; }
 
+/** Una celda vacía significa «lleno»: es lo que se hacía antes de existir la columna. */
+function esLleno(v) {
+  if (v === '' || v === null || v === undefined) return true;
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toUpperCase();
+  return !(s === 'FALSE' || s === 'NO' || s === '0' || s === 'PARCIAL');
+}
+
 function num(v) {
   if (v === '' || v === null || v === undefined) return null;
   const x = parseFloat(String(v).replace(',', '.'));
   return isNaN(x) ? null : x;
+}
+
+/** Acepta Date, yyyy-mm-dd (input date) y dd/mm/aaaa (lo que devuelve Gemini). */
+function aFecha(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  const s = String(v).trim();
+  if (!s) return null;
+
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (m) {
+    let anio = +m[3];
+    if (anio < 100) anio += 2000;
+    return new Date(anio, +m[2] - 1, +m[1]);
+  }
+
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** Fecha con la que se ordena y se agrupa: la del ticket, y si falta la de registro. */
+function fechaEfectiva(fila) {
+  return aFecha(fila[C.FECHA_TICKET]) || aFecha(fila[C.TS]);
 }
 
 function redondear(v, dec) {
@@ -220,15 +271,26 @@ function guardarRepostaje(datos) {
   const kmTotales = num(datos.kmTotales);
   if (kmTotales === null) return { ok: false, error: 'Faltan los KM totales.' };
 
+  // Validación dura: el odómetro no retrocede
+  const kmMaximo = maximoKmRegistrado();
+  if (kmMaximo !== null && kmTotales < kmMaximo) {
+    return {
+      ok: false,
+      error: 'Los KM totales (' + kmTotales + ') son menores que los del último registro (' +
+             kmMaximo + '). Revisa el odómetro antes de guardar.'
+    };
+  }
+
   const idRecibo = 'REP-' + new Date().getTime().toString().slice(-6);
   const ahora = new Date();
+  const fechaTicket = aFecha(datos.fechaTicket);
 
   // Renombramos la foto con el ID definitivo
   let urlRecibo = (datos.recibo && datos.recibo.url) || '';
   if (datos.recibo && datos.recibo.fileId) {
     try {
       DriveApp.getFileById(datos.recibo.fileId)
-        .setName(idRecibo + '_' + Utilities.formatDate(ahora, ZONA, 'yyyy-MM-dd') + '.jpg');
+        .setName(idRecibo + '_' + Utilities.formatDate(fechaTicket || ahora, ZONA, 'yyyy-MM-dd') + '.jpg');
     } catch (err) {
       console.error('No se pudo renombrar el recibo: ' + err.message);
     }
@@ -236,24 +298,28 @@ function guardarRepostaje(datos) {
 
   const filas = items.map(it => {
     const fila = new Array(CABECERAS.length).fill('');
-    fila[C.ID]         = idRecibo;
-    fila[C.TS]         = ahora;
-    fila[C.ESTACION]   = datos.estacion || '';
-    fila[C.TIPO]       = it.tipo;
-    fila[C.LITROS]     = it.litros;
-    fila[C.PRECIO]     = it.precio_litro;
-    fila[C.TOTAL]      = it.total;
-    fila[C.KM_TOTAL]   = kmTotales;
-    fila[C.LEC_GLP]    = vacio(num(datos.lecturaGLP));
-    fila[C.LEC_GAS]    = vacio(num(datos.lecturaGasolina));
-    fila[C.CONS_COCHE] = vacio(num(esGLP(it.tipo) ? datos.consumoCocheGLP : datos.consumoCocheGasolina));
-    fila[C.RECIBO]     = urlRecibo;
+    fila[C.ID]           = idRecibo;
+    fila[C.TS]           = ahora;
+    fila[C.ESTACION]     = datos.estacion || '';
+    fila[C.TIPO]         = it.tipo;
+    fila[C.LITROS]       = it.litros;
+    fila[C.PRECIO]       = it.precio_litro;
+    fila[C.TOTAL]        = it.total;
+    fila[C.KM_TOTAL]     = kmTotales;
+    fila[C.LEC_GLP]      = vacio(num(datos.lecturaGLP));
+    fila[C.LEC_GAS]      = vacio(num(datos.lecturaGasolina));
+    fila[C.CONS_COCHE]   = vacio(num(esGLP(it.tipo) ? datos.consumoCocheGLP : datos.consumoCocheGasolina));
+    fila[C.RECIBO]       = urlRecibo;
+    fila[C.LLENO]        = it.lleno;
+    fila[C.FECHA_TICKET] = fechaTicket || '';
     return fila;
   });
 
   const inicio = hoja.getLastRow() + 1;
   asegurarTamano(hoja, inicio + filas.length - 1, CABECERAS.length);
   hoja.getRange(inicio, 1, filas.length, CABECERAS.length).setValues(filas);
+  hoja.getRange(inicio, COL_LLENO, filas.length, 1).insertCheckboxes();
+  hoja.getRange(inicio, COL_FECHA_TICKET, filas.length, 1).setNumberFormat('dd/mm/yyyy');
   SpreadsheetApp.flush();
 
   const resumen = recalcularTodo();
@@ -264,7 +330,7 @@ function guardarRepostaje(datos) {
     avisoDrive: urlRecibo ? '' : 'La foto no se guardó en Drive.',
     avisos: (resumen.avisos || []).filter(a => a.id === idRecibo),
     ultimo: resumen.ultimo,
-    items: items.map(i => ({ tipo: i.tipo, litros: i.litros, total: i.total }))
+    items: items.map(i => ({ tipo: i.tipo, litros: i.litros, total: i.total, lleno: i.lleno }))
   };
 }
 
@@ -284,6 +350,16 @@ function tramoDeContador(lecturaActual, lecturaPrevia) {
 
 /**
  * Recalcula tramos, acumulados por combustible, consumos y costes de toda la hoja.
+ *
+ * Ventana de cálculo de un combustible: desde su último llenado hasta el siguiente.
+ * Un repostaje parcial no la cierra; sus litros y euros se arrastran al llenado
+ * que venga después, que es el único que puede dar un consumo honesto.
+ *
+ * Cuando un ticket cierra la ventana, el consumo y el coste se escriben en la
+ * primera fila de ese combustible dentro del ticket, junto con los km de la
+ * ventana. Así cada ventana aparece una sola vez y el dashboard puede ponderar
+ * sin contar dos veces los mismos kilómetros.
+ *
  * Devuelve un resumen con los avisos de coherencia detectados.
  */
 function recalcularTodo() {
@@ -304,24 +380,26 @@ function recalcularTodo() {
   });
 
   let previo = null;          // ticket anterior
-  let accGLP = 0, accGas = 0; // km acumulados desde el último repostaje de cada combustible
-  // El acumulado solo sirve si conocemos TODOS los tramos desde ese repostaje.
+  let accGLP = 0, accGas = 0; // km acumulados desde el último llenado de cada combustible
+  // El acumulado solo sirve si conocemos TODOS los tramos desde ese llenado.
   // Si en algún tramo falta la lectura, el consumo de ese depósito no es calculable.
   let completoGLP = false, completoGas = false;
   let vistoGLP = false, vistoGas = false;
+  // Litros y euros de repostajes parciales pendientes de cerrar ventana
+  let arrLitrosGLP = 0, arrEurosGLP = 0, arrLitrosGas = 0, arrEurosGas = 0;
   const avisos = [];
 
   orden.forEach(id => {
     const idx = porId[id];
     const ref = filas[idx[0]];
 
-    const kmTotal   = num(ref[C.KM_TOTAL]);
-    const lecGLP    = num(ref[C.LEC_GLP]);
-    const lecGas    = num(ref[C.LEC_GAS]);
+    const kmTotal = num(ref[C.KM_TOTAL]);
+    const lecGLP  = num(ref[C.LEC_GLP]);
+    const lecGas  = num(ref[C.LEC_GAS]);
 
-    const kmTramo   = (kmTotal !== null && previo && previo.kmTotal !== null) ? kmTotal - previo.kmTotal : null;
-    const tramoGLP  = tramoDeContador(lecGLP, previo ? previo.lecGLP : null);
-    const tramoGas  = tramoDeContador(lecGas, previo ? previo.lecGas : null);
+    const kmTramo  = (kmTotal !== null && previo && previo.kmTotal !== null) ? kmTotal - previo.kmTotal : null;
+    const tramoGLP = tramoDeContador(lecGLP, previo ? previo.lecGLP : null);
+    const tramoGas = tramoDeContador(lecGas, previo ? previo.lecGas : null);
 
     // Aviso de coherencia: los km de los dos combustibles deberían cuadrar con el tramo
     if (kmTramo !== null && tramoGLP !== null && tramoGas !== null) {
@@ -338,23 +416,34 @@ function recalcularTodo() {
     if (tramoGLP === null) completoGLP = false; else accGLP += tramoGLP;
     if (tramoGas === null) completoGas = false; else accGas += tramoGas;
 
-    // ¿Qué combustibles trae este ticket?
-    const traeGLP = idx.some(i => esGLP(filas[i][C.TIPO]));
-    const traeGas = idx.some(i => !esGLP(filas[i][C.TIPO]));
+    // ¿Qué combustibles trae este ticket y cuáles llenan su depósito?
+    const idxGLP = idx.filter(i => esGLP(filas[i][C.TIPO]));
+    const idxGas = idx.filter(i => !esGLP(filas[i][C.TIPO]));
+    const traeGLP = idxGLP.length > 0;
+    const traeGas = idxGas.length > 0;
+    const llenaGLP = traeGLP && idxGLP.every(i => esLleno(filas[i][C.LLENO]));
+    const llenaGas = traeGas && idxGas.every(i => esLleno(filas[i][C.LLENO]));
 
-    // El consumo solo sale si el depósito estaba lleno al principio de la ventana
-    // (hubo un repostaje previo de ese combustible) y conocemos todos sus tramos.
-    const fiableGLP = traeGLP && vistoGLP && completoGLP && accGLP > 0;
-    const fiableGas = traeGas && vistoGas && completoGas && accGas > 0;
+    // Los litros y euros del ticket entran en la ventana abierta de su combustible
+    idxGLP.forEach(i => { arrLitrosGLP += num(filas[i][C.LITROS]) || 0; arrEurosGLP += num(filas[i][C.TOTAL]) || 0; });
+    idxGas.forEach(i => { arrLitrosGas += num(filas[i][C.LITROS]) || 0; arrEurosGas += num(filas[i][C.TOTAL]) || 0; });
+
+    // El consumo solo sale si el depósito estaba lleno al principio de la ventana,
+    // se vuelve a llenar ahora y conocemos todos los tramos intermedios.
+    const fiableGLP = llenaGLP && vistoGLP && completoGLP && accGLP > 0;
+    const fiableGas = llenaGas && vistoGas && completoGas && accGas > 0;
+
+    const cierraGLP = fiableGLP ? idxGLP[0] : -1;
+    const cierraGas = fiableGas ? idxGas[0] : -1;
 
     idx.forEach(i => {
       const f = filas[i];
       const glp = esGLP(f[C.TIPO]);
-      const fiable = glp ? fiableGLP : fiableGas;
-      const kmCalc = fiable ? (glp ? accGLP : accGas) : null;
-      const litros = num(f[C.LITROS]);
-      const total  = num(f[C.TOTAL]);
-      const precio = num(f[C.PRECIO]);
+      const cierra = (glp && i === cierraGLP) || (!glp && i === cierraGas);
+      const kmCalc  = cierra ? (glp ? accGLP : accGas) : null;
+      const litros  = glp ? arrLitrosGLP : arrLitrosGas;
+      const euros   = glp ? arrEurosGLP  : arrEurosGas;
+      const precio    = num(f[C.PRECIO]);
       const consCoche = num(f[C.CONS_COCHE]);
 
       f[C.KM_TRAMO] = vacio(kmTramo);
@@ -362,13 +451,15 @@ function recalcularTodo() {
       f[C.KM_GAS]   = vacio(tramoGas);
       f[C.KM_CALC]  = vacio(kmCalc);
 
-      f[C.CONS_REAL]   = vacio(fiable && litros ? redondear((litros / kmCalc) * 100, 2) : null);
-      f[C.COSTE_REAL]  = vacio(fiable && total  ? redondear(total / kmCalc, 4) : null);
+      f[C.CONS_REAL]   = vacio(cierra && litros ? redondear((litros / kmCalc) * 100, 2) : null);
+      f[C.COSTE_REAL]  = vacio(cierra && euros  ? redondear(euros / kmCalc, 4) : null);
       f[C.COSTE_COCHE] = vacio(consCoche && precio ? redondear((precio * consCoche) / 100, 4) : null);
+      if (f[C.LLENO] === '' || f[C.LLENO] === null) f[C.LLENO] = true;
     });
 
-    if (traeGLP) { accGLP = 0; completoGLP = true; vistoGLP = true; }
-    if (traeGas) { accGas = 0; completoGas = true; vistoGas = true; }
+    // Un llenado cierra la ventana de su combustible; un parcial la deja abierta
+    if (llenaGLP) { accGLP = 0; completoGLP = true; vistoGLP = true; arrLitrosGLP = 0; arrEurosGLP = 0; }
+    if (llenaGas) { accGas = 0; completoGas = true; vistoGas = true; arrLitrosGas = 0; arrEurosGas = 0; }
 
     previo = { kmTotal, lecGLP, lecGas };
   });
@@ -379,7 +470,12 @@ function recalcularTodo() {
   return {
     avisos,
     ultimo: previo,
-    pendientes: { kmGLPSinRepostar: accGLP, kmGasolinaSinRepostar: accGas }
+    pendientes: {
+      kmGLPSinRepostar: accGLP,
+      kmGasolinaSinRepostar: accGas,
+      litrosGLPArrastrados: arrLitrosGLP,
+      litrosGasolinaArrastrados: arrLitrosGas
+    }
   };
 }
 
@@ -420,13 +516,30 @@ function ultimoTicket() {
   const filas = leerFilas();
   if (!filas.length) return null;
   const f = filas[filas.length - 1];
-  return { id: f[C.ID], kmTotales: num(f[C.KM_TOTAL]), lecturaGLP: num(f[C.LEC_GLP]), lecturaGas: num(f[C.LEC_GAS]) };
+  return {
+    id: f[C.ID],
+    kmTotales: num(f[C.KM_TOTAL]),
+    lecturaGLP: num(f[C.LEC_GLP]),
+    lecturaGas: num(f[C.LEC_GAS]),
+    fecha: fechaEfectiva(f)
+  };
+}
+
+function maximoKmRegistrado() {
+  const kms = leerFilas().map(f => num(f[C.KM_TOTAL])).filter(k => k !== null);
+  return kms.length ? Math.max.apply(null, kms) : null;
 }
 
 function resumenUltimoTicket() {
   const t = ultimoTicket();
   if (!t) return null;
-  return { kmTotales: t.kmTotales, lecturaGLP: t.lecturaGLP, lecturaGasolina: t.lecturaGas };
+  return {
+    kmTotales: t.kmTotales,
+    lecturaGLP: t.lecturaGLP,
+    lecturaGasolina: t.lecturaGas,
+    kmMaximo: maximoKmRegistrado(),
+    fecha: t.fecha ? Utilities.formatDate(t.fecha, ZONA, 'yyyy-MM-dd') : ''
+  };
 }
 
 function listaEstaciones() {
@@ -441,15 +554,20 @@ function listaEstaciones() {
 
 function getDashboardData() {
   const registros = leerFilas().map(f => {
-    const fecha = f[C.TS] instanceof Date ? f[C.TS] : new Date(f[C.TS]);
+    const fTicket = aFecha(f[C.FECHA_TICKET]);
+    const fReg    = aFecha(f[C.TS]);
+    const fEfec   = fTicket || fReg;
     return {
       id: f[C.ID],
-      fecha: isNaN(fecha.getTime()) ? String(f[C.TS]) : Utilities.formatDate(fecha, ZONA, 'yyyy-MM-dd'),
+      fecha: fEfec ? Utilities.formatDate(fEfec, ZONA, 'yyyy-MM-dd') : '',
+      fechaRegistro: fReg ? Utilities.formatDate(fReg, ZONA, 'yyyy-MM-dd') : '',
+      fechaDelTicket: !!fTicket,
       estacion: f[C.ESTACION] || 'Sin estación',
       tipo: f[C.TIPO],
       litros: num(f[C.LITROS]),
       precio: num(f[C.PRECIO]),
       total: num(f[C.TOTAL]),
+      lleno: esLleno(f[C.LLENO]),
       kmTotales: num(f[C.KM_TOTAL]),
       kmTramo: num(f[C.KM_TRAMO]),
       kmGLP: num(f[C.KM_GLP]),
@@ -468,8 +586,48 @@ function getDashboardData() {
   return {
     registros,
     estaciones: listaEstaciones(),
+    version: VERSION,
     actualizado: Utilities.formatDate(new Date(), ZONA, 'dd/MM/yyyy HH:mm')
   };
+}
+
+// ============================================================
+//  EXPORTACIÓN
+//  Devuelve el CSV dentro del JSON: así el proxy de Netlify no
+//  necesita ningún tratamiento especial y el navegador se encarga
+//  de convertirlo en descarga.
+// ============================================================
+
+function exportarCSV() {
+  const filas = leerFilas();
+  const lineas = [CABECERAS.map(celdaCSV).join(';')];
+
+  filas.forEach(f => {
+    lineas.push(f.map((v, i) => {
+      if (i === C.TS) {
+        const d = aFecha(v);
+        return d ? Utilities.formatDate(d, ZONA, 'dd/MM/yyyy HH:mm:ss') : '';
+      }
+      if (i === C.FECHA_TICKET) {
+        const d = aFecha(v);
+        return d ? Utilities.formatDate(d, ZONA, 'dd/MM/yyyy') : '';
+      }
+      if (i === C.LLENO) return esLleno(v) ? 'Sí' : 'No';
+      if (typeof v === 'number') return String(v).replace('.', ',');
+      return celdaCSV(v);
+    }).join(';'));
+  });
+
+  return {
+    csv: lineas.join('\r\n'),
+    nombre: 'RefuelControl_' + Utilities.formatDate(new Date(), ZONA, 'yyyyMMdd') + '.csv',
+    filas: filas.length
+  };
+}
+
+function celdaCSV(v) {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
 // ============================================================
@@ -495,16 +653,33 @@ function diagnosticoDrive() {
   }
 }
 
-/** Añade la columna S a una hoja que ya tenga el esquema de 18 columnas. */
+/**
+ * Pone al día la cabecera y las columnas nuevas, y recalcula la hoja.
+ * Es idempotente: puedes ejecutarlo tantas veces como quieras.
+ */
 function actualizarEsquema() {
   const hoja = getHoja();
   hoja.getRange(1, 1, 1, CABECERAS.length).setValues([CABECERAS])
       .setFontWeight('bold').setBackground('#1E1E1E').setFontColor('#FFFFFF');
   hoja.setFrozenRows(1);
+
+  const ultima = hoja.getLastRow();
+  if (ultima >= 2) {
+    const n = ultima - 1;
+
+    // Todo lo registrado antes de que existiera la columna era un depósito lleno
+    const rLleno = hoja.getRange(2, COL_LLENO, n, 1);
+    const llenos = rLleno.getValues().map(v => [esLleno(v[0])]);
+    rLleno.setValues(llenos);
+    rLleno.insertCheckboxes();
+
+    hoja.getRange(2, COL_FECHA_TICKET, n, 1).setNumberFormat('dd/mm/yyyy');
+  }
+
   const r = recalcularTodo();
   try {
     SpreadsheetApp.getUi().alert(
-      'Esquema actualizado y hoja recalculada.\n\n' +
+      'Esquema actualizado a ' + CABECERAS.length + ' columnas y hoja recalculada.\n\n' +
       (r.avisos.length ? 'Avisos:\n' + r.avisos.map(a => '· ' + a.texto).join('\n')
                        : 'Sin avisos de coherencia.')
     );
@@ -540,6 +715,7 @@ function migrarEsquema() {
     fila[C.TOTAL]    = vacio(num(v[6]));
     fila[C.KM_TOTAL] = vacio(num(v[2]));
     fila[C.RECIBO]   = v[10] || '';
+    fila[C.LLENO]    = true;
     return fila;
   });
 
@@ -548,7 +724,11 @@ function migrarEsquema() {
   hoja.getRange(1, 1, 1, CABECERAS.length).setValues([CABECERAS])
       .setFontWeight('bold').setBackground('#1E1E1E').setFontColor('#FFFFFF');
   hoja.setFrozenRows(1);
-  if (nuevas.length) hoja.getRange(2, 1, nuevas.length, CABECERAS.length).setValues(nuevas);
+  if (nuevas.length) {
+    hoja.getRange(2, 1, nuevas.length, CABECERAS.length).setValues(nuevas);
+    hoja.getRange(2, COL_LLENO, nuevas.length, 1).insertCheckboxes();
+    hoja.getRange(2, COL_FECHA_TICKET, nuevas.length, 1).setNumberFormat('dd/mm/yyyy');
+  }
 
   recalcularTodo();
   ui.alert('Migración completada: ' + nuevas.length + ' filas.\nCopia de seguridad: ' + backup.getName());

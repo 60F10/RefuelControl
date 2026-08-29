@@ -29,6 +29,7 @@
   h1 span{color:var(--glp);text-shadow:0 0 8px var(--glp);}
   h2{font-size:1rem;margin:0 0 12px;color:var(--muted);font-weight:500;}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;}
+  .paso{font-size:.7rem;color:#6E6E6E;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
   label{display:block;font-size:.78rem;color:var(--muted);margin:0 0 6px;}
   .hint{font-size:.72rem;color:#6E6E6E;margin:-8px 0 12px;line-height:1.4;}
   input,select{
@@ -36,11 +37,15 @@
     padding:12px;border-radius:10px;font-size:16px;margin-bottom:12px;font-family:inherit;
   }
   input:focus,select:focus{outline:none;border-color:var(--g98);}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;}
+  input.mal{border-color:var(--rojo);}
+  /* align-items:end alinea las cajas por abajo aunque una etiqueta ocupe dos líneas */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;align-items:end;}
   .btn{width:100%;border:none;border-radius:10px;padding:14px;font-size:1rem;
     font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px;}
   .btn-primary{background:linear-gradient(90deg,var(--glp),var(--g98));color:#000;
     box-shadow:0 0 14px rgba(40,242,2,.45),0 0 22px rgba(0,255,255,.3);}
+  .btn-primary.alerta{background:linear-gradient(90deg,var(--oro),var(--rojo));
+    box-shadow:0 0 14px rgba(255,209,102,.4);}
   .btn-ghost{background:#0E0E0E;border:1px dashed var(--g98);color:var(--g98);font-weight:500;}
   .btn-ghost.ok{border-style:solid;color:var(--glp);border-color:var(--glp);}
   .btn:disabled{opacity:.45;box-shadow:none;}
@@ -54,7 +59,7 @@
   .chart-box{position:relative;width:100%;height:240px;}
   .chart-box.alto{height:270px;}
   .refresh{float:right;background:none;border:1px solid var(--border);color:var(--muted);
-    padding:6px 10px;border-radius:8px;font-size:.75rem;cursor:pointer;}
+    padding:6px 10px;border-radius:8px;font-size:.75rem;cursor:pointer;margin-left:8px;}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:.78rem;}
   .legend-item{display:flex;align-items:center;gap:6px;}
   .legend-swatch{width:12px;height:12px;border-radius:3px;display:inline-block;}
@@ -62,7 +67,7 @@
   .kpi{background:#151515;border:1px solid var(--border);border-radius:12px;padding:12px;}
   .kpi .k{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
   .kpi .v{font-size:1.25rem;font-weight:700;margin-top:4px;}
-  .kpi .s{font-size:.72rem;color:#6E6E6E;margin-top:2px;}
+  .kpi .s{font-size:.72rem;color:#6E6E6E;margin-top:2px;line-height:1.45;}
   .kpi.wide{grid-column:1 / -1;}
   .toggle{display:flex;background:#0E0E0E;border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:14px;}
   .toggle button{flex:1;background:none;border:none;color:var(--muted);padding:9px;border-radius:7px;
@@ -76,13 +81,35 @@
     padding:4px 9px;font-size:.72rem;cursor:pointer;}
   .barra{height:8px;border-radius:99px;background:#0E0E0E;overflow:hidden;display:flex;margin-top:8px;}
   .barra i{display:block;height:100%;}
+  /* Casilla «depósito lleno»: área de toque grande, que se usa con el móvil en la mano */
+  .check{display:flex;align-items:center;gap:10px;padding:10px 0 2px;cursor:pointer;}
+  .check input{width:22px;height:22px;margin:0;accent-color:var(--glp);flex:0 0 auto;}
+  .check span{font-size:.85rem;color:var(--text);}
+  .check small{display:block;font-size:.72rem;color:#6E6E6E;margin-top:2px;line-height:1.35;}
+  .parcial{border-color:var(--oro);}
 </style>
 </head>
 <body>
 
-<h1>Control de <span>Repostajes</span> V2</h1>
+<h1>Control de <span>Repostajes</span></h1>
 
+<!-- 1 · El ticket. Es lo primero que tienes en la mano al salir del surtidor. -->
 <div class="card">
+  <div class="paso">Paso 1 · El ticket</div>
+  <input type="file" id="inCam" accept="image/*" capture="environment" hidden>
+  <input type="file" id="inGal" accept="image/*" hidden>
+  <div class="row-btns">
+    <button class="btn btn-ghost" id="btnCam">Hacer foto</button>
+    <button class="btn btn-ghost" id="btnGal">Galería</button>
+  </div>
+  <img id="preview" alt="Ticket">
+  <button class="btn btn-primary" id="btnAnalizar">Analizar ticket</button>
+  <div id="status"></div>
+</div>
+
+<!-- 2 · Los números del ordenador de a bordo, mientras Gemini lee el ticket. -->
+<div class="card">
+  <div class="paso">Paso 2 · Datos del coche</div>
   <label for="km">KM totales del coche *</label>
   <input type="number" id="km" inputmode="decimal" placeholder="Ej. 4780">
   <div class="hint" id="hintKm"></div>
@@ -101,40 +128,42 @@
 
   <div class="grid2">
     <div>
-      <label for="consGlp">Consumo GLP (L/100km)</label>
+      <label for="consGlp">Consumo GLP</label>
       <input type="number" id="consGlp" inputmode="decimal" step="0.1" placeholder="del coche">
     </div>
     <div>
-      <label for="consGas">Consumo gasolina (L/100km)</label>
+      <label for="consGas">Consumo gasolina</label>
       <input type="number" id="consGas" inputmode="decimal" step="0.1" placeholder="del coche">
     </div>
   </div>
-
-  <label>Foto del ticket *</label>
-  <input type="file" id="inCam" accept="image/*" capture="environment" hidden>
-  <input type="file" id="inGal" accept="image/*" hidden>
-  <div class="row-btns">
-    <button class="btn btn-ghost" id="btnCam">Hacer foto</button>
-    <button class="btn btn-ghost" id="btnGal">Galería</button>
-  </div>
-  <img id="preview" alt="Ticket">
-
-  <button class="btn btn-primary" id="btnAnalizar">Analizar ticket</button>
-  <div id="status"></div>
+  <div class="hint">En L/100km, tal y como los da el ordenador de a bordo.</div>
 </div>
 
+<!-- 3 · Revisión de lo que ha leído Gemini. -->
 <div class="card" id="revision">
-  <h2>Revisa antes de guardar</h2>
-  <label for="estacion">Estación de servicio</label>
-  <input type="text" id="estacion" list="listaEstaciones" placeholder="Ej. E.S. DISA Padre Anchieta">
-  <datalist id="listaEstaciones"></datalist>
+  <div class="paso">Paso 3 · Revisa antes de guardar</div>
+  <div class="grid2">
+    <div>
+      <label for="fechaTicket">Fecha del ticket</label>
+      <input type="date" id="fechaTicket">
+    </div>
+    <div>
+      <label for="estacion">Estación</label>
+      <input type="text" id="estacion" list="listaEstaciones" placeholder="E.S. DISA Padre Anchieta">
+      <datalist id="listaEstaciones"></datalist>
+    </div>
+  </div>
   <div id="items"></div>
+  <div id="validacion"></div>
   <button class="btn btn-primary" id="btnGuardar">Guardar repostaje</button>
   <button class="btn btn-ghost" id="btnCancelar">Descartar</button>
 </div>
 
 <div class="card">
-  <h2>Resumen <button class="refresh" id="btnRefresh">Actualizar ↻</button></h2>
+  <h2>Resumen
+    <button class="refresh" id="btnRefresh">Actualizar ↻</button>
+    <button class="refresh" id="btnExport">CSV ↓</button>
+  </h2>
   <div class="toggle">
     <button id="tgReal" class="on">Cálculo real</button>
     <button id="tgCoche">Datos del coche</button>
@@ -198,11 +227,13 @@ const esGLP = t => String(t).toUpperCase().indexOf('GLP') >= 0;
 const eur = v => (v === null || v === undefined || isNaN(v)) ? '—' : v.toLocaleString('es-ES', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
 const km  = v => (v === null || v === undefined || isNaN(v)) ? '—' : Math.round(v).toLocaleString('es-ES') + ' km';
 const dec = (v,d=2) => (v === null || v === undefined || isNaN(v)) ? '—' : v.toLocaleString('es-ES', {minimumFractionDigits:d, maximumFractionDigits:d});
+const ddmm = f => f ? f.split('-').reverse().slice(0,2).join('/') : '';
 
 let MODO = 'real';
 let DATOS = { registros: [], estaciones: [] };
 let ANALISIS = null, RECIBO = null;
 let fotoB64 = null, fotoMime = null;
+let avisosAceptados = false;
 
 const $ = id => document.getElementById(id);
 const statusEl = $('status');
@@ -320,10 +351,10 @@ async function api(payload) {
 // ==========================================================
 //  Analizar: subir la foto y luego pasarla por Gemini.
 //  Dos llamadas cortas, para no agotar el tiempo de la función.
+//  Los KM no hacen falta todavía: se validan al guardar.
 // ==========================================================
 $('btnAnalizar').onclick = async () => {
-  if (!$('km').value) return info('Faltan los KM totales.', 'aviso');
-  if (!fotoB64)       return info('Falta la foto del ticket.', 'aviso');
+  if (!fotoB64) return info('Falta la foto del ticket.', 'aviso');
 
   $('btnAnalizar').disabled = true;
   try {
@@ -353,6 +384,7 @@ $('btnAnalizar').onclick = async () => {
 
 function pintarRevision(r) {
   $('estacion').value = r.estacion || '';
+  $('fechaTicket').value = r.fechaTicket || '';
   $('listaEstaciones').innerHTML = (r.estacionesConocidas || [])
     .map(e => '<option value="' + e.replace(/"/g, '&quot;') + '">').join('');
 
@@ -373,10 +405,45 @@ function pintarRevision(r) {
       </div>
       <label>Total (€)</label>
       <input type="number" step="0.01" class="f-total" value="${it.total}">
+      <label class="check">
+        <input type="checkbox" class="f-lleno" ${it.lleno === false ? '' : 'checked'}>
+        <span>Depósito lleno
+          <small>Desmárcalo si echaste una cantidad suelta. Sus litros se sumarán al siguiente llenado en vez de dar un consumo falso.</small>
+        </span>
+      </label>
     </div>`).join('');
+
+  marcarParciales();
+  $('validacion').innerHTML = '';
+  avisosAceptados = false;
+  $('btnGuardar').textContent = 'Guardar repostaje';
+  $('btnGuardar').classList.remove('alerta');
 
   $('revision').style.display = 'block';
   $('revision').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/** El borde ámbar recuerda de un vistazo qué depósito quedó a medias. */
+function marcarParciales() {
+  document.querySelectorAll('#items .item').forEach(el => {
+    const lleno = el.querySelector('.f-lleno').checked;
+    el.classList.toggle('parcial', !lleno);
+  });
+}
+
+$('items').addEventListener('change', e => {
+  if (e.target.classList.contains('f-lleno')) marcarParciales();
+  reiniciarAvisos();
+});
+$('items').addEventListener('input', reiniciarAvisos);
+['km','lecGlp','lecGas','fechaTicket'].forEach(id => $(id).addEventListener('input', reiniciarAvisos));
+
+/** Si cambias algo, los avisos que ya habías aceptado vuelven a contar. */
+function reiniciarAvisos() {
+  if (!avisosAceptados) return;
+  avisosAceptados = false;
+  $('btnGuardar').textContent = 'Guardar repostaje';
+  $('btnGuardar').classList.remove('alerta');
 }
 
 function borrarItem(i) { ANALISIS.items.splice(i, 1); pintarRevision(ANALISIS); }
@@ -388,6 +455,82 @@ $('btnCancelar').onclick = () => {
 };
 
 // ==========================================================
+//  Validación previa (2.3)
+//  Los errores no dejan guardar. Los avisos piden un segundo
+//  toque, porque a veces el raro eres tú y no el dato.
+// ==========================================================
+function maximoKm() {
+  const kms = (DATOS.registros || []).map(r => r.kmTotales).filter(k => k);
+  return kms.length ? Math.max.apply(null, kms) : null;
+}
+
+function validar(items) {
+  const errores = [], avisos = [];
+  document.querySelectorAll('input.mal').forEach(el => el.classList.remove('mal'));
+
+  const kmT = parseFloat($('km').value);
+  const kmMax = maximoKm();
+
+  if (!$('km').value || isNaN(kmT)) {
+    errores.push('Faltan los KM totales del coche.');
+    $('km').classList.add('mal');
+  } else if (kmMax !== null && kmT < kmMax) {
+    errores.push('Los KM totales (' + km(kmT) + ') son menores que los del último registro (' + km(kmMax) + ').');
+    $('km').classList.add('mal');
+  } else if (kmMax !== null && kmT === kmMax) {
+    avisos.push('Los KM totales son idénticos a los del último registro. ¿Seguro que no te has saltado el odómetro?');
+  }
+
+  const lecGlp = parseFloat($('lecGlp').value) || 0;
+  const lecGas = parseFloat($('lecGas').value) || 0;
+  const tramo = (kmMax !== null && !isNaN(kmT)) ? kmT - kmMax : null;
+
+  if (tramo !== null && tramo > 0 && (lecGlp || lecGas)) {
+    const suma = lecGlp + lecGas;
+    if (Math.abs(suma - tramo) > tramo * 0.15) {
+      avisos.push('Los parciales suman ' + km(suma) + ' y el tramo recorrido es de ' + km(tramo) +
+                  '. ¿Olvidaste resetear alguno?');
+      $('lecGlp').classList.add('mal');
+      $('lecGas').classList.add('mal');
+    }
+  }
+  if (tramo !== null && tramo > 0 && !lecGlp && !lecGas) {
+    avisos.push('Sin parciales no se puede calcular el consumo real de este tramo.');
+  }
+
+  items.forEach((it, i) => {
+    const caja = document.querySelectorAll('#items .item')[i];
+    if (it.total > 0 && (!it.litros || !it.precio_litro)) {
+      avisos.push(it.tipo + ': litros o €/litro a cero con un total de ' + eur(it.total) +
+                  '. Lo más probable es que Gemini leyera mal el ticket.');
+      if (!it.litros && caja) caja.querySelector('.f-litros').classList.add('mal');
+      if (!it.precio_litro && caja) caja.querySelector('.f-precio').classList.add('mal');
+    }
+    if (it.litros && it.precio_litro && it.total) {
+      const calculado = it.litros * it.precio_litro;
+      if (Math.abs(calculado - it.total) > Math.max(0.15, it.total * 0.02)) {
+        avisos.push(it.tipo + ': ' + dec(it.litros) + ' L a ' + dec(it.precio_litro, 3) + ' € dan ' +
+                    eur(calculado) + ', pero el total pone ' + eur(it.total) + '.');
+        if (caja) caja.querySelector('.f-total').classList.add('mal');
+      }
+    }
+  });
+
+  if (!$('fechaTicket').value) {
+    avisos.push('Sin fecha del ticket, los gráficos usarán la fecha de hoy.');
+  }
+
+  return { errores, avisos };
+}
+
+function pintarValidacion(v) {
+  const linea = (t, clase) => '<div class="' + clase + '" style="font-size:.8rem;margin-bottom:6px;line-height:1.45">' + t + '</div>';
+  $('validacion').innerHTML =
+    v.errores.map(t => linea('⛔ ' + t, 'aviso')).join('') +
+    v.avisos.map(t => linea('⚠️ ' + t, 'aviso')).join('');
+}
+
+// ==========================================================
 //  Guardar
 // ==========================================================
 $('btnGuardar').onclick = async () => {
@@ -395,9 +538,26 @@ $('btnGuardar').onclick = async () => {
     tipo: el.querySelector('.f-tipo').value,
     litros: parseFloat(el.querySelector('.f-litros').value) || 0,
     precio_litro: parseFloat(el.querySelector('.f-precio').value) || 0,
-    total: parseFloat(el.querySelector('.f-total').value) || 0
+    total: parseFloat(el.querySelector('.f-total').value) || 0,
+    lleno: el.querySelector('.f-lleno').checked
   }));
   if (!items.length) return info('No queda ningún combustible que guardar.', 'aviso');
+
+  const v = validar(items);
+  pintarValidacion(v);
+
+  if (v.errores.length) {
+    info('Corrige lo marcado antes de guardar.', 'aviso');
+    $('validacion').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  if (v.avisos.length && !avisosAceptados) {
+    avisosAceptados = true;
+    $('btnGuardar').textContent = 'Guardar de todas formas';
+    $('btnGuardar').classList.add('alerta');
+    $('validacion').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
 
   $('btnGuardar').disabled = true;
   info('Guardando en el Sheet...');
@@ -407,6 +567,7 @@ $('btnGuardar').onclick = async () => {
       action: 'guardar',
       datos: {
         estacion: $('estacion').value.trim(),
+        fechaTicket: $('fechaTicket').value,
         kmTotales: $('km').value,
         lecturaGLP: $('lecGlp').value,
         lecturaGasolina: $('lecGas').value,
@@ -419,17 +580,21 @@ $('btnGuardar').onclick = async () => {
     if (!r.ok) throw new Error(r.error || 'Error desconocido');
 
     let msg = '<span class="ok">✅ ' + r.idRecibo + ': ' +
-      r.items.map(i => i.tipo + ' ' + dec(i.litros) + ' L (' + eur(i.total) + ')').join(' + ') + '</span>';
+      r.items.map(i => i.tipo + ' ' + dec(i.litros) + ' L (' + eur(i.total) + ')' +
+                       (i.lleno ? '' : ' · parcial')).join(' + ') + '</span>';
     if (r.avisoDrive) msg += '<br><span class="aviso">⚠️ ' + r.avisoDrive + '</span>';
     (r.avisos || []).forEach(a => { msg += '<br><span class="aviso">⚠️ ' + a.texto + '</span>'; });
     statusEl.innerHTML = msg;
 
-    ['km','lecGlp','lecGas','consGlp','consGas','estacion'].forEach(id => $(id).value = '');
+    ['km','lecGlp','lecGas','consGlp','consGas','estacion','fechaTicket'].forEach(id => $(id).value = '');
     $('revision').style.display = 'none';
     $('preview').style.display = 'none';
+    $('validacion').innerHTML = '';
     $('btnCam').classList.remove('ok');
     $('btnGal').classList.remove('ok');
-    fotoB64 = null; ANALISIS = null; RECIBO = null;
+    $('btnGuardar').textContent = 'Guardar repostaje';
+    $('btnGuardar').classList.remove('alerta');
+    fotoB64 = null; ANALISIS = null; RECIBO = null; avisosAceptados = false;
     cargarDashboard();
   } catch (err) {
     info('❌ ' + err.message, 'aviso');
@@ -458,19 +623,95 @@ $('btnRefresh').onclick = cargarDashboard;
 $('tgReal').onclick  = () => { MODO = 'real';  $('tgReal').classList.add('on');  $('tgCoche').classList.remove('on'); pintarTodo(); };
 $('tgCoche').onclick = () => { MODO = 'coche'; $('tgCoche').classList.add('on'); $('tgReal').classList.remove('on');  pintarTodo(); };
 
+// ==========================================================
+//  Exportar a CSV (4.3)
+//  El backend devuelve el texto dentro del JSON; el navegador
+//  lo convierte en descarga. El BOM es para que Excel respete
+//  los acentos.
+// ==========================================================
+$('btnExport').onclick = async () => {
+  const btn = $('btnExport');
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '...';
+  try {
+    const res = await fetch(API + '?action=export', { cache: 'no-store' });
+    const d = await leerJSON(res);
+    if (!d.ok) throw new Error(d.error || 'sin respuesta');
+
+    const blob = new Blob(['﻿' + d.csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = d.nombre;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    info(d.filas + ' filas exportadas a ' + d.nombre + '.', 'ok');
+  } catch (err) {
+    info('No se pudo exportar: ' + err.message, 'aviso');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+};
+
 function pintarPistas() {
   const ult = (DATOS.registros || []).slice(-1)[0];
-  if (ult) $('hintKm').textContent = 'Último registro: ' + km(ult.kmTotales) + ' · ' + ult.fecha.split('-').reverse().join('/');
+  if (!ult) return;
+  const kmMax = maximoKm();
+  $('hintKm').textContent = 'Último registro: ' + km(kmMax) + ' · ' + ddmm(ult.fecha);
 }
 
 // ==========================================================
 //  Agregados
+//
+//  Las medias van ponderadas por kilómetros (0.1). Hacer la media
+//  aritmética de los €/km de cada repostaje daba el mismo peso a un
+//  tramo de 100 km que a uno de 500, y sesgaba el resultado hacia los
+//  tramos cortos.
+//
+//  · Modo real:  el peso es kmCalculo, los km de la ventana que ese
+//    repostaje cierra. El backend solo lo escribe en una fila por
+//    ventana, así que ningún kilómetro cuenta dos veces.
+//  · Modo coche: el peso son los km que el coche midió en ese tramo
+//    para ese combustible.
 // ==========================================================
+function mediaPonderada(pares) {
+  let numerador = 0, pesos = 0;
+  pares.forEach(x => {
+    if (x.valor === null || x.valor === undefined || isNaN(x.valor)) return;
+    if (!x.peso || x.peso <= 0) return;
+    numerador += x.valor * x.peso;
+    pesos += x.peso;
+  });
+  return pesos ? { valor: numerador / pesos, km: pesos } : { valor: null, km: 0 };
+}
+
 function agregados() {
   const regs = DATOS.registros || [];
+
+  // Cuántas filas del mismo depósito trae cada ticket, para repartir el peso
+  // en modo coche sin contar el tramo más de una vez.
+  const hermanas = {};
+  regs.forEach(r => {
+    const clave = r.id + '|' + (esGLP(r.tipo) ? 'glp' : 'gas');
+    hermanas[clave] = (hermanas[clave] || 0) + 1;
+  });
+
+  const pesoDe = r => {
+    if (MODO === 'real') return r.kmCalculo || 0;
+    const kmTicket = esGLP(r.tipo) ? r.kmGLP : r.kmGas;
+    if (!kmTicket) return 0;
+    return kmTicket / hermanas[r.id + '|' + (esGLP(r.tipo) ? 'glp' : 'gas')];
+  };
+  const costeDe   = r => MODO === 'real' ? r.costeKmReal : r.costeKmCoche;
+  const consumoDe = r => MODO === 'real' ? r.consumoReal : r.consumoCoche;
+
   const tickets = {};
   regs.forEach(r => {
-    if (!tickets[r.id]) tickets[r.id] = { fecha: r.fecha, kmTramo: r.kmTramo, kmGLP: r.kmGLP, kmGas: r.kmGas };
+    if (!tickets[r.id]) tickets[r.id] = { id: r.id, fecha: r.fecha, kmTramo: r.kmTramo, kmGLP: r.kmGLP, kmGas: r.kmGas };
   });
   const listaTickets = Object.values(tickets);
   const suma = (arr, f) => arr.reduce((a, x) => a + (f(x) || 0), 0);
@@ -480,38 +721,75 @@ function agregados() {
   const kmTot = suma(listaTickets, t => t.kmTramo);
   const kmMax = Math.max(0, ...regs.map(r => r.kmTotales || 0));
 
+  // Agregados por tipo de producto (GLP, Gasolina 95, Gasolina 98)
   const porTipo = {};
   regs.forEach(r => {
     const t = r.tipo;
-    if (!porTipo[t]) porTipo[t] = { tipo: t, total: 0, litros: 0, precios: [], costesReal: [], costesCoche: [], consReal: [], consCoche: [] };
+    if (!porTipo[t]) porTipo[t] = { tipo: t, total: 0, litros: 0, precios: [], costes: [], consumos: [] };
     const p = porTipo[t];
     p.total += r.total || 0;
     p.litros += r.litros || 0;
     if (r.precio) p.precios.push(r.precio);
-    if (r.costeKmReal) p.costesReal.push(r.costeKmReal);
-    if (r.costeKmCoche) p.costesCoche.push(r.costeKmCoche);
-    if (r.consumoReal) p.consReal.push(r.consumoReal);
-    if (r.consumoCoche) p.consCoche.push(r.consumoCoche);
+    const peso = pesoDe(r);
+    p.costes.push({ valor: costeDe(r), peso });
+    p.consumos.push({ valor: consumoDe(r), peso });
   });
 
   const media = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
   Object.values(porTipo).forEach(p => {
-    p.precioMedio  = media(p.precios);
-    p.costeKm      = media(MODO === 'real' ? p.costesReal : p.costesCoche);
-    p.consumoMedio = media(MODO === 'real' ? p.consReal : p.consCoche);
+    p.precioMedio = media(p.precios);
+    const c = mediaPonderada(p.costes);
+    const k = mediaPonderada(p.consumos);
+    p.costeKm = c.valor;
+    p.consumoMedio = k.valor;
+    p.kmMedidos = k.km;
   });
 
-  const costesGLP = [], costesGas = [];
+  // Agregados por depósito (GLP frente a toda la gasolina)
+  const paresGLP = { costes: [], consumos: [] }, paresGas = { costes: [], consumos: [] };
   regs.forEach(r => {
-    const c = MODO === 'real' ? r.costeKmReal : r.costeKmCoche;
-    if (!c) return;
-    (esGLP(r.tipo) ? costesGLP : costesGas).push(c);
+    const destino = esGLP(r.tipo) ? paresGLP : paresGas;
+    const peso = pesoDe(r);
+    destino.costes.push({ valor: costeDe(r), peso });
+    destino.consumos.push({ valor: consumoDe(r), peso });
   });
-  const costeGLP = media(costesGLP), costeGas = media(costesGas);
-  const ahorro = (costeGLP && costeGas && kmGLP) ? kmGLP * (costeGas - costeGLP) : null;
 
-  return { regs, listaTickets, porTipo, kmGLP, kmGas, kmTot, kmMax, costeGLP, costeGas, ahorro,
-           gastoTotal: suma(regs, r => r.total) };
+  const cGLP = mediaPonderada(paresGLP.costes),   cGas = mediaPonderada(paresGas.costes);
+  const kGLP = mediaPonderada(paresGLP.consumos), kGas = mediaPonderada(paresGas.consumos);
+
+  const costeGLP = cGLP.valor, costeGas = cGas.valor;
+  const kmGLPMedidos = cGLP.km, kmGasMedidos = cGas.km;
+
+  // Ahorro: la cifra medida sobre los km con coste conocido y, aparte,
+  // la proyección a todos los kilómetros recorridos con GLP.
+  const diferencia = (costeGLP !== null && costeGas !== null) ? costeGas - costeGLP : null;
+  const ahorroMedido    = diferencia === null ? null : kmGLPMedidos * diferencia;
+  const ahorroProyectado = diferencia === null ? null : kmGLP * diferencia;
+
+  // Punto de equilibrio (1.1): a qué precio el GLP deja de compensar
+  const ultimoPrecio = tipo => {
+    const lista = regs.filter(r => (esGLP(r.tipo) === (tipo === 'glp')) && r.precio);
+    return lista.length ? lista[lista.length - 1] : null;
+  };
+  const refGas = ultimoPrecio('gas'), refGLP = ultimoPrecio('glp');
+  let equilibrio = null;
+  if (kGLP.valor && kGas.valor && refGas) {
+    equilibrio = {
+      precio: refGas.precio * (kGLP.valor / kGas.valor),
+      precioGasolina: refGas.precio,
+      tipoGasolina: refGas.tipo,
+      precioActualGLP: refGLP ? refGLP.precio : null,
+      consumoGLP: kGLP.valor,
+      consumoGas: kGas.valor
+    };
+  }
+
+  return {
+    regs, listaTickets, porTipo, kmGLP, kmGas, kmTot, kmMax,
+    costeGLP, costeGas, kmGLPMedidos, kmGasMedidos,
+    ahorroMedido, ahorroProyectado, equilibrio,
+    gastoTotal: suma(regs, r => r.total)
+  };
 }
 
 // ==========================================================
@@ -565,8 +843,10 @@ function pintarKPIs(a) {
     { k: 'Gasto total', v: eur(a.gastoTotal), s: a.regs.length + ' líneas de repostaje' },
     { k: 'KM con GLP', v: km(a.kmGLP), s: pctGLP === null ? '' : dec(pctGLP, 0) + '% del total' },
     { k: 'KM con gasolina', v: km(a.kmGas), s: pctGLP === null ? '' : dec(100 - pctGLP, 0) + '% del total' },
-    { k: '€/km con GLP', v: a.costeGLP ? dec(a.costeGLP, 4) + ' €' : '—', s: 'Gasto GLP: ' + eur((a.porTipo['GLP'] || {}).total) },
-    { k: '€/km con gasolina', v: a.costeGas ? dec(a.costeGas, 4) + ' €' : '—', s: 'Gasto gasolina: ' + eur(gastoGas) }
+    { k: '€/km con GLP', v: a.costeGLP ? dec(a.costeGLP, 4) + ' €' : '—',
+      s: 'Gasto GLP: ' + eur((a.porTipo['GLP'] || {}).total) + (a.kmGLPMedidos ? ' · medido en ' + km(a.kmGLPMedidos) : '') },
+    { k: '€/km con gasolina', v: a.costeGas ? dec(a.costeGas, 4) + ' €' : '—',
+      s: 'Gasto gasolina: ' + eur(gastoGas) + (a.kmGasMedidos ? ' · medido en ' + km(a.kmGasMedidos) : '') }
   ];
 
   let html = tarjetas.map(t =>
@@ -590,12 +870,36 @@ function pintarKPIs(a) {
     </div>`;
   }
 
-  if (a.ahorro) {
-    const positivo = a.ahorro > 0;
+  // Punto de equilibrio (1.1)
+  if (a.equilibrio) {
+    const e = a.equilibrio;
+    const margen = e.precioActualGLP !== null ? e.precio - e.precioActualGLP : null;
+    const compensa = margen === null || margen > 0;
     html += `<div class="kpi wide">
-      <div class="k">${positivo ? 'Ahorro acumulado con GLP' : 'Sobrecoste acumulado del GLP'}</div>
-      <div class="v" style="color:${positivo ? 'var(--oro)' : 'var(--rojo)'}">${eur(Math.abs(a.ahorro))}</div>
-      <div class="s">Frente a haber recorrido esos ${km(a.kmGLP)} con gasolina</div>
+      <div class="k">Punto de equilibrio del GLP</div>
+      <div class="v" style="color:${compensa ? 'var(--glp)' : 'var(--rojo)'}">
+        Hasta ${dec(e.precio, 3)} €/L</div>
+      <div class="s">
+        Con la ${e.tipoGasolina.toLowerCase()} a ${dec(e.precioGasolina, 3)} €/L y consumos de
+        ${dec(e.consumoGLP)} frente a ${dec(e.consumoGas)} L/100km.
+        ${e.precioActualGLP === null ? '' :
+          (compensa
+            ? 'Pagas ' + dec(e.precioActualGLP, 3) + ' €/L, así que te sobran ' + dec(margen, 3) + ' € de margen.'
+            : 'Pagas ' + dec(e.precioActualGLP, 3) + ' €/L: a este precio ya no compensa.')}
+      </div>
+    </div>`;
+  }
+
+  // Ahorro: la cifra medida y, debajo, la proyección al total de km con GLP
+  if (a.ahorroMedido) {
+    const positivo = a.ahorroMedido > 0;
+    const proyecta = a.ahorroProyectado && Math.round(a.kmGLP) > Math.round(a.kmGLPMedidos);
+    html += `<div class="kpi wide">
+      <div class="k">${positivo ? 'Ahorro con GLP' : 'Sobrecoste del GLP'}</div>
+      <div class="v" style="color:${positivo ? 'var(--oro)' : 'var(--rojo)'}">${eur(Math.abs(a.ahorroMedido))}</div>
+      <div class="s">Sobre los ${km(a.kmGLPMedidos)} con consumo medido.
+        ${proyecta ? 'Al mismo ritmo, los ' + km(a.kmGLP) + ' recorridos con GLP serían ' +
+                     eur(Math.abs(a.ahorroProyectado)) + '.' : ''}</div>
     </div>`;
   }
 
@@ -633,14 +937,48 @@ function pintarKm(a) {
   });
 }
 
+/**
+ * Series temporales (0.4)
+ *
+ * El eje es la lista de tickets, no la de fechas. Buscar por fecha y tipo con
+ * find() hacía que dos repostajes del mismo combustible el mismo día se pisaran:
+ * solo se pintaba el primero. Un ticket es un punto, siempre.
+ */
+function ordenarTickets(regs) {
+  const vistos = {}, lista = [];
+  regs.forEach((r, i) => {
+    if (vistos[r.id]) return;
+    vistos[r.id] = true;
+    lista.push({ id: r.id, fecha: r.fecha, orden: i });
+  });
+  // Por fecha y, a igualdad, por el orden en que están en la hoja
+  return lista.sort((x, y) => (x.fecha === y.fecha ? x.orden - y.orden : (x.fecha < y.fecha ? -1 : 1)));
+}
+
 function pintarSeriesTemporales(a) {
-  const fechas = [...new Set(a.regs.map(r => r.fecha))].sort();
-  const etiquetas = fechas.map(f => f.split('-').reverse().slice(0, 2).join('/'));
+  const tickets = ordenarTickets(a.regs);
   const tipos = Object.keys(a.porTipo);
+
+  // Si un día tiene más de un ticket, la etiqueta lo dice: 27/08 (1), 27/08 (2)
+  const cuantosPorDia = {};
+  tickets.forEach(t => { cuantosPorDia[t.fecha] = (cuantosPorDia[t.fecha] || 0) + 1; });
+  const contador = {};
+  const etiquetas = tickets.map(t => {
+    if (cuantosPorDia[t.fecha] === 1) return ddmm(t.fecha);
+    contador[t.fecha] = (contador[t.fecha] || 0) + 1;
+    return ddmm(t.fecha) + ' (' + contador[t.fecha] + ')';
+  });
+
+  // Índice ticket+tipo -> registro, para no rebuscar en cada serie
+  const indice = {};
+  a.regs.forEach(r => { indice[r.id + '|' + r.tipo] = r; });
 
   const serie = campo => tipos.map(t => ({
     label: t,
-    data: fechas.map(f => { const r = a.regs.find(x => x.fecha === f && x.tipo === t); return r ? r[campo] : null; }),
+    data: tickets.map(tk => {
+      const r = indice[tk.id + '|' + t];
+      return r && r[campo] !== null && r[campo] !== undefined ? r[campo] : null;
+    }),
     borderColor: colorDe(t), backgroundColor: colorDe(t),
     borderWidth: 2, pointRadius: 3, tension: .3, spanGaps: true
   }));
@@ -699,7 +1037,7 @@ function pintarEstaciones(a) {
 }
 
 function pintarMeses(a) {
-  const meses = [...new Set(a.regs.map(r => r.fecha.slice(0, 7)))].sort();
+  const meses = [...new Set(a.regs.map(r => r.fecha.slice(0, 7)))].filter(Boolean).sort();
   const tipos = Object.keys(a.porTipo);
   leyenda('lgMes', tipos.map(t => ({ color: colorDe(t), label: t })));
   pintar('chMeses', {
