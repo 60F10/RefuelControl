@@ -1,6 +1,6 @@
 // Sube este número si quieres forzar el borrado de la caché en los móviles.
 // Para un cambio normal en index.html no hace falta: la estrategia es "red primero".
-const CACHE = 'repostajes-v6';
+const CACHE = 'repostajes-v7';
 
 // Si mueves o renombras alguno de estos archivos, acuérdate de cambiarlo aquí.
 const ESTATICOS = [

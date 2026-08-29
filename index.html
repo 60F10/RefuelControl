@@ -193,9 +193,71 @@
     padding:18px;max-width:340px;width:100%;}
   .modal h3{margin:0 0 10px;font-size:1rem;}
   .modal p{font-size:.82rem;color:var(--muted);line-height:1.55;margin:0 0 14px;}
+
+  /* ---------- Pantalla de bloqueo ----------
+     Tapa la app entera hasta que el código guardado en este móvil vale. No es
+     la seguridad de verdad (esa la pone la función de Netlify rechazando las
+     peticiones sin código), pero evita que se vean los datos. */
+  #bloqueo{
+    position:fixed;inset:0;z-index:60;background:var(--bg);
+    display:none;flex-direction:column;align-items:center;justify-content:center;
+    padding:calc(24px + env(safe-area-inset-top)) 22px calc(24px + env(safe-area-inset-bottom));
+    text-align:center;
+  }
+  #bloqueo.on{display:flex;}
+  #bloqueo .logo{width:96px;height:96px;display:block;margin:0 auto 14px;}
+  #bloqueo h1{font-size:1.15rem;margin:0 0 6px;letter-spacing:.4px;}
+  #bloqueo h1 span{color:var(--glp);text-shadow:0 0 8px var(--glp);}
+  #bloqueo p{font-size:.82rem;color:var(--muted);line-height:1.55;margin:0 0 20px;max-width:300px;}
+  #bloqueo form{width:100%;max-width:300px;}
+  #bloqueo input{
+    width:100%;background:#151515;border:1px solid var(--border);border-radius:10px;
+    color:var(--text);font-size:1.1rem;padding:13px 14px;text-align:center;
+    letter-spacing:3px;margin-bottom:12px;
+  }
+  #bloqueo input:focus{outline:none;border-color:var(--glp);}
+  #estadoBloqueo{font-size:.8rem;min-height:1.3em;margin-top:12px;}
+  /* Salir es cosa de una vez cada mucho: no compite con los botones de arriba. */
+  #btnSalir{font-size:.75rem;padding:9px;color:#6E6E6E;border:1px solid var(--border);
+    background:transparent;font-weight:400;margin-bottom:0;}
+
+  /* ---------- Tirar hacia abajo para actualizar ----------
+     El indicador vive fuera del carril: se mueve con transform, así que no
+     provoca reflow ni empuja el contenido. */
+  #ptr{
+    position:fixed;left:50%;top:calc(6px + env(safe-area-inset-top));z-index:30;
+    width:34px;height:34px;margin-left:-17px;border-radius:50%;
+    background:var(--panel);border:1px solid var(--border);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--glp);font-size:1rem;
+    opacity:0;transform:translateY(-46px);pointer-events:none;
+  }
+  #ptr.suelto{transition:transform .22s ease, opacity .22s ease;}
+  #ptr.girando svg{animation:girar .9s linear infinite;}
+  #ptr svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.1;
+    stroke-linecap:round;stroke-linejoin:round;}
+  @keyframes girar{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
+
+<!-- ══════════════ PANTALLA DE BLOQUEO ══════════════ -->
+<div id="bloqueo">
+  <img class="logo" src="img/icon-512.png" alt="" width="96" height="96">
+  <h1>Control de <span>repostajes</span></h1>
+  <p>Esta app es privada. Mete el código de acceso una vez y este móvil lo recuerda.</p>
+  <form id="formCodigo">
+    <input type="password" id="inCodigo" inputmode="text" autocomplete="current-password"
+           autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="código">
+    <button type="submit" class="btn btn-primary" id="btnEntrar">Entrar</button>
+  </form>
+  <div id="estadoBloqueo"></div>
+</div>
+
+<!-- Indicador de «tirar hacia abajo para actualizar» -->
+<div id="ptr" aria-hidden="true">
+  <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg>
+</div>
 
 <div id="carril">
 
@@ -384,6 +446,7 @@
       <button class="btn btn-ghost" id="btnRefresh">Actualizar ↻</button>
     </div>
     <div id="estadoHistorial" style="font-size:.8rem;color:var(--muted);min-height:1.2em"></div>
+    <button class="btn btn-ghost" id="btnSalir" style="margin-top:10px">Olvidar el código en este móvil</button>
   </div>
 
   <div id="listaRepostajes"></div>
@@ -439,6 +502,15 @@
 //  función de Netlify, en variables de entorno.
 // ==========================================================
 const API = '/api/repostaje';
+
+// Código de acceso. Se guarda en este dispositivo y viaja en la cabecera
+// `X-Codigo` de cada petición: quien no lo lleve recibe un 401 de la función de
+// Netlify y no llega a ver ni un dato. El valor bueno vive en la variable de
+// entorno APP_PIN de Netlify, nunca en el repo.
+const CLAVE_CODIGO = 'refuelcontrol.codigo';
+let CODIGO = '';
+try { CODIGO = localStorage.getItem(CLAVE_CODIGO) || ''; } catch (err) { CODIGO = ''; }
+let bloqueado = true;
 
 // Datos del coche. Ajústalos aquí si cambian.
 const COCHE = {
@@ -800,14 +872,119 @@ async function leerJSON(res) {
   }
 }
 
+/**
+ * Un 401 del proxy significa que el código de acceso no vale. Se distingue del
+ * resto de errores para no meter el repostaje en la cola offline por error: el
+ * servidor está perfectamente, lo que falla es la llave.
+ */
+function errorDeCodigo(mensaje) {
+  const err = new Error(mensaje || 'El código de acceso no vale.');
+  err.noAutorizado = true;
+  return err;
+}
+
+async function responder(res) {
+  if (res.status === 401) {
+    bloquear('El código ya no vale. Vuelve a meterlo.');
+    throw errorDeCodigo();
+  }
+  return leerJSON(res);
+}
+
+/** Lectura. El sufijo `_` es anticaché: sin él Google puede servir datos viejos. */
+async function apiGet(consulta) {
+  const res = await fetch(API + '?' + consulta + '&_=' + Date.now(), {
+    cache: 'no-store',
+    headers: { 'X-Codigo': CODIGO, 'Cache-Control': 'no-cache' }
+  });
+  return responder(res);
+}
+
 async function api(payload) {
   const res = await fetch(API, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Codigo': CODIGO },
     body: JSON.stringify(payload)
   });
-  return leerJSON(res);
+  return responder(res);
 }
+
+// ==========================================================
+//  PANTALLA DE BLOQUEO
+//
+//  La app no se puede usar sin código, pero la seguridad de verdad
+//  la pone el proxy: aunque alguien se salte esta pantalla desde la
+//  consola, /api/repostaje le responde 401.
+// ==========================================================
+function guardarCodigo(valor) {
+  CODIGO = valor;
+  try {
+    if (valor) localStorage.setItem(CLAVE_CODIGO, valor);
+    else localStorage.removeItem(CLAVE_CODIGO);
+  } catch (err) { /* Safari en privado: se usará solo durante esta sesión */ }
+}
+
+function bloquear(mensaje) {
+  bloqueado = true;
+  $('bloqueo').classList.add('on');
+  $('estadoBloqueo').innerHTML = mensaje ? '<span class="aviso">' + esc(mensaje) + '</span>' : '';
+  $('inCodigo').value = '';
+}
+
+function desbloquear() {
+  bloqueado = false;
+  $('bloqueo').classList.remove('on');
+  $('estadoBloqueo').innerHTML = '';
+}
+
+$('formCodigo').onsubmit = async e => {
+  e.preventDefault();
+  const valor = $('inCodigo').value.trim();
+  if (!valor) return;
+
+  const btn = $('btnEntrar');
+  btn.disabled = true;
+  $('estadoBloqueo').textContent = 'Comprobando...';
+
+  const anterior = CODIGO;
+  CODIGO = valor;
+  try {
+    const r = await fetch(API + '?action=comprobar&_=' + Date.now(), {
+      cache: 'no-store',
+      headers: { 'X-Codigo': valor }
+    });
+    if (r.status === 401) {
+      CODIGO = anterior;
+      $('estadoBloqueo').innerHTML = '<span class="aviso">Ese código no es.</span>';
+      return;
+    }
+    const d = await leerJSON(r);
+    if (!d.ok) throw new Error(d.error || 'sin respuesta');
+
+    guardarCodigo(valor);
+    desbloquear();
+    arrancarDatos();
+  } catch (err) {
+    // Sin cobertura no se puede comprobar, pero tampoco hay nada que enseñar:
+    // se guarda el código y ya se validará en la primera llamada con red.
+    if (!navigator.onLine) {
+      guardarCodigo(valor);
+      desbloquear();
+      arrancarDatos();
+      return;
+    }
+    CODIGO = anterior;
+    $('estadoBloqueo').innerHTML = '<span class="aviso">' + esc(err.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+$('btnSalir').onclick = () => {
+  guardarCodigo('');
+  DATOS = { registros: [], estaciones: [], ubicaciones: [], depositos: null };
+  bloquear('Código olvidado en este dispositivo.');
+};
 
 // ==========================================================
 //  Analizar: subir la foto y luego pasarla por Gemini.
@@ -1123,6 +1300,9 @@ $('btnGuardar').onclick = async () => {
     limpiarFormulario();
     cargarDashboard();
   } catch (err) {
+    // Un 401 no es un problema de red: el repostaje no va a la cola, porque
+    // subirlo con un código malo fallaría igual. Se pide el código y ya está.
+    if (err.noAutorizado) return;   // el `finally` ya reactiva el botón
     // Si el fallo fue de red, no perdemos el repostaje
     try {
       await encolar({ datos, fotoB64, fotoMime, recibo: RECIBO });
@@ -1152,21 +1332,44 @@ function limpiarFormulario() {
 // ==========================================================
 //  Dashboard
 // ==========================================================
-async function cargarDashboard() {
+let ultimaCarga = 0;       // cuándo se trajeron los datos por última vez
+let promesaCarga = null;   // recarga en curso
+
+/**
+ * Las recargas se ponen en fila en vez de solaparse. Engancharse a la que ya
+ * está en marcha sería más rápido, pero después de un borrado devolvería la
+ * respuesta que salió ANTES de borrar: justo el dato viejo que se quería evitar.
+ */
+function cargarDashboard() {
+  const anterior = promesaCarga || Promise.resolve();
+  const mia = anterior.catch(() => {}).then(() => traerDashboard());
+  promesaCarga = mia;
+  mia.catch(() => {}).then(() => { if (promesaCarga === mia) promesaCarga = null; });
+  return mia;
+}
+
+async function traerDashboard() {
   try {
-    const res = await fetch(API + '?action=dashboard', { cache: 'no-store' });
-    const data = await leerJSON(res);
-    if (!data.ok) return info('Dashboard: ' + (data.error || 'sin respuesta'), 'aviso');
+    const data = await apiGet('action=dashboard');
+    if (!data.ok) { info('Dashboard: ' + (data.error || 'sin respuesta'), 'aviso'); return false; }
     DATOS = data;
-    Object.keys(pintados).forEach(k => delete pintados[k]);
-    pintarModulo(MODULOS[moduloActual].id);
-    pintarPistas();
+    ultimaCarga = Date.now();
+    repintarTodo();
+    return true;
   } catch (err) {
-    info('No se pudo cargar el dashboard: ' + err.message, 'aviso');
+    if (!err.noAutorizado) info('No se pudo cargar el dashboard: ' + err.message, 'aviso');
+    return false;
   }
 }
 
-$('btnRefresh').onclick = cargarDashboard;
+/** Tira los gráficos ya dibujados y vuelve a pintar el módulo que se está viendo. */
+function repintarTodo() {
+  Object.keys(pintados).forEach(k => delete pintados[k]);
+  pintarModulo(MODULOS[moduloActual].id);
+  pintarPistas();
+}
+
+$('btnRefresh').onclick = () => cargarDashboard();
 
 document.querySelectorAll('.tgReal').forEach(b => b.onclick = () => cambiarModo('real'));
 document.querySelectorAll('.tgCoche').forEach(b => b.onclick = () => cambiarModo('coche'));
@@ -1903,7 +2106,15 @@ async function guardarEdicion(id, caja) {
     editando = null;
     await cargarDashboard();
   } catch (err) {
-    $('estadoHistorial').innerHTML = '<span class="aviso">❌ ' + esc(err.message) + '</span>';
+    if (err.noAutorizado) return;
+    // Igual que en el borrado: la edición puede haber entrado aunque la espera
+    // se agotara, así que se recarga para que la pantalla diga la verdad.
+    $('estadoHistorial').textContent = 'Sin respuesta. Recargando para ver cómo quedó...';
+    const recargado = await cargarDashboard();
+    $('estadoHistorial').innerHTML = recargado
+      ? '<span class="aviso">⚠️ No hubo respuesta al guardar (' + esc(err.message) +
+        '). La lista está recargada: comprueba si el cambio entró.</span>'
+      : '<span class="aviso">❌ ' + esc(err.message) + '</span>';
   } finally {
     btn.disabled = false;
   }
@@ -1922,18 +2133,48 @@ function confirmarBorrado(id) {
 $('modalNo').onclick = () => $('modal').classList.remove('on');
 $('modal').onclick = e => { if (e.target === $('modal')) $('modal').classList.remove('on'); };
 
+/**
+ * Borrado a prueba de esperas.
+ *
+ * Un borrado dispara `recalcularTodo()` en el Apps Script, que con la hoja
+ * llena puede pasarse de los 10 s que aguanta la función de Netlify. Antes eso
+ * dejaba la app con el repostaje en pantalla aunque en el Sheet ya no estuviera.
+ * Ahora: se quita de la lista en cuanto el servidor dice que sí, y si la llamada
+ * se cae se comprueba releyendo el dashboard, que es quien manda.
+ */
+function quitarTicket(id) {
+  DATOS.registros = (DATOS.registros || []).filter(r => r.id !== id);
+  repintarTodo();
+}
+
 async function borrar(id) {
   $('estadoHistorial').textContent = 'Borrando ' + id + '...';
+  editando = null;
+
   try {
     const r = await api({ action: 'borrar', id });
     if (!r.ok) throw new Error(r.error || 'Error desconocido');
+
+    quitarTicket(id);                       // la lista se actualiza ya, sin esperar
     let msg = '🗑️ ' + id + ' borrado (' + r.filasBorradas + ' ' + (r.filasBorradas === 1 ? 'fila' : 'filas') + '). ' + r.nota;
     (r.ordenAvisos || []).forEach(a => { msg += ' ⚠️ ' + a.texto; });
     $('estadoHistorial').innerHTML = '<span class="ok">' + esc(msg) + '</span>';
-    editando = null;
-    await cargarDashboard();
+
+    await cargarDashboard();                // y se recalculan los consumos
   } catch (err) {
-    $('estadoHistorial').innerHTML = '<span class="aviso">❌ ' + esc(err.message) + '</span>';
+    if (err.noAutorizado) return;
+
+    // Puede que el borrado sí llegara y lo que se agotó fuera la espera.
+    $('estadoHistorial').textContent = 'Sin respuesta. Comprobando si se borró...';
+    const recargado = await cargarDashboard();
+    const sigue = (DATOS.registros || []).some(r => r.id === id);
+
+    if (recargado && !sigue) {
+      $('estadoHistorial').innerHTML = '<span class="ok">🗑️ ' + esc(id) +
+        ' borrado. Tardó más de la cuenta, pero se hizo.</span>';
+    } else {
+      $('estadoHistorial').innerHTML = '<span class="aviso">❌ ' + esc(err.message) + '</span>';
+    }
   }
 }
 
@@ -1947,8 +2188,7 @@ $('btnExport').onclick = async () => {
   btn.disabled = true;
   $('estadoHistorial').textContent = 'Generando el CSV...';
   try {
-    const res = await fetch(API + '?action=export', { cache: 'no-store' });
-    const d = await leerJSON(res);
+    const d = await apiGet('action=export');
     if (!d.ok) throw new Error(d.error || 'sin respuesta');
 
     const blob = new Blob(['﻿' + d.csv], { type: 'text/csv;charset=utf-8;' });
@@ -2122,16 +2362,155 @@ function pintarCuriosidades(a) {
 }
 
 // ==========================================================
+//  REFRESCO
+//
+//  Tres caminos hacia los mismos datos: tirar hacia abajo en
+//  cualquier módulo, volver a la app después de tenerla en segundo
+//  plano, y el botón de siempre. Antes solo existía el botón, así que
+//  había que cerrar y abrir la PWA para ver un cambio.
+// ==========================================================
+const PTR_UMBRAL = 62;         // píxeles de tirón que disparan el refresco
+const PTR_TOPE = 110;          // hasta dónde sigue el indicador al dedo
+const REFRESCO_MIN = 30000;    // no se recarga dos veces en menos de esto
+let refrescando = false;
+
+function moverPtr(dist, animado) {
+  const ptr = $('ptr');
+  ptr.classList.toggle('suelto', !!animado);
+  if (dist <= 0) {
+    ptr.style.opacity = 0;
+    ptr.style.transform = 'translateY(-46px)';
+    return;
+  }
+  const p = Math.min(1, dist / PTR_UMBRAL);
+  ptr.style.opacity = Math.min(1, p * 1.25);
+  ptr.style.transform = 'translateY(' + Math.min(dist, PTR_TOPE) + 'px) rotate(' + (p * 270) + 'deg)';
+}
+
+async function refrescarAhora() {
+  if (refrescando) return;
+  refrescando = true;
+
+  const ptr = $('ptr');
+  ptr.classList.add('suelto', 'girando');
+  ptr.style.opacity = 1;
+  ptr.style.transform = 'translateY(52px)';
+
+  await refrescarPendientes();
+  const ok = await cargarDashboard();
+  if (ok) sincronizarCola(true);
+
+  setTimeout(() => {
+    ptr.classList.remove('girando');
+    refrescando = false;
+    moverPtr(0, true);
+  }, 320);
+}
+
+/**
+ * El gesto se decide en el primer movimiento: si el dedo va de lado manda el
+ * carril horizontal y no lo tocamos; solo si baja estando arriba del todo se
+ * captura el gesto con preventDefault (de ahí el listener sin `passive`).
+ */
+document.querySelectorAll('.modulo').forEach(mod => {
+  let y0 = 0, x0 = 0, sigo = false, decidido = false, dist = 0;
+
+  mod.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || refrescando || bloqueado) { sigo = false; return; }
+    y0 = e.touches[0].clientY;
+    x0 = e.touches[0].clientX;
+    sigo = mod.scrollTop <= 0;
+    decidido = false;
+    dist = 0;
+  }, { passive: true });
+
+  mod.addEventListener('touchmove', e => {
+    if (!sigo) return;
+    const dy = e.touches[0].clientY - y0;
+    const dx = e.touches[0].clientX - x0;
+
+    if (!decidido) {
+      if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return;
+      decidido = true;
+      if (dy <= 0 || Math.abs(dx) > Math.abs(dy) * 0.7) { sigo = false; moverPtr(0); return; }
+    }
+    if (dy <= 0) { dist = 0; moverPtr(0); return; }
+
+    dist = dy * 0.45;            // resistencia: el indicador va más lento que el dedo
+    moverPtr(dist);
+    e.preventDefault();
+  }, { passive: false });
+
+  const soltar = () => {
+    if (!sigo) return;
+    sigo = false;
+    if (dist >= PTR_UMBRAL) refrescarAhora();
+    else moverPtr(0, true);
+    dist = 0;
+  };
+  mod.addEventListener('touchend', soltar, { passive: true });
+  mod.addEventListener('touchcancel', soltar, { passive: true });
+});
+
+/** Al volver a la app: datos frescos sin cerrarla y abrirla. */
+function refrescarSiToca(forzar) {
+  if (bloqueado || !CODIGO) return;
+  if (!forzar && Date.now() - ultimaCarga < REFRESCO_MIN) return;
+  refrescarPendientes();
+  cargarDashboard().then(ok => { if (ok) sincronizarCola(true); });
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  refrescarSiToca();
+  buscarVersionNueva();
+});
+window.addEventListener('pageshow', e => { if (e.persisted) refrescarSiToca(true); });
+window.addEventListener('focus', () => refrescarSiToca());
+
+// ==========================================================
+//  Service worker
+//  Si hay una versión nueva publicada, la app se recarga sola en
+//  cuanto toma el control. La primera instalación no cuenta.
+// ==========================================================
+let registroSW = null;
+let recargando = false;
+let controlado = 'serviceWorker' in navigator && !!navigator.serviceWorker.controller;
+
+function registrarServicio() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('sw.js').then(reg => { registroSW = reg; }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!controlado) { controlado = true; return; }
+    if (recargando) return;
+    recargando = true;
+    location.reload();
+  });
+}
+
+function buscarVersionNueva() {
+  if (registroSW) registroSW.update().catch(() => {});
+}
+
+// ==========================================================
 //  Arranque
 // ==========================================================
+function arrancarDatos() {
+  refrescarPendientes();
+  cargarDashboard().then(ok => { if (ok) sincronizarCola(true); });
+  pedirUbicacion();
+}
+
 montarBarra();
 marcarModulo(0);
-refrescarPendientes();
-cargarDashboard().then(() => sincronizarCola(true));
-pedirUbicacion();
+registrarServicio();
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+if (CODIGO) {
+  desbloquear();
+  arrancarDatos();
+} else {
+  bloquear();
+  setTimeout(() => $('inCodigo').focus(), 150);
 }
 </script>
 </body>

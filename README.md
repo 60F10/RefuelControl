@@ -64,7 +64,7 @@ appsscript.json         Manifiesto del script: zona horaria y permisos
 manifest.json           Manifiesto de la PWA
 sw.js                   Service worker, estrategia red primero
 netlify.toml            Publicación y redirección de /api
-netlify/functions/      El proxy que guarda la URL del backend y el token
+netlify/functions/      El proxy: guarda la URL del backend y el token, y valida el código
 img/                    Iconos de la PWA y capturas de pantalla
 test/                   Bancos de pruebas y prueba de humo en Chromium
 ```
@@ -113,10 +113,19 @@ Si mueves los iconos, hay que cambiar la ruta en tres sitios: el `apple-touch-ic
    |---|---|
    | `GOOGLE_SCRIPT_URL` | la URL `/exec` del paso anterior |
    | `SHARED_TOKEN` | el mismo valor que pusiste en Apps Script |
+   | `APP_PIN` | el código de acceso que teclearás en la app |
 
 3. Despliega.
 
 El `netlify.toml` ya redirige `/api/repostaje` a la función. El front no contiene ninguna clave, así que el repositorio puede ser público.
+
+**Configura `APP_PIN` antes del primer despliegue.** Sin esa variable la función responde 500 y la app no funciona, que es justo lo que se busca: mejor cerrada que abierta. Usa algo largo, tipo frase, no cuatro dígitos.
+
+### Código de acceso
+
+La app es privada. Al abrirla pide un código, que se guarda en ese dispositivo y viaja en la cabecera `X-Codigo` de cada petición. La función de Netlify lo compara con `APP_PIN` en tiempo constante y responde **401** sin llegar a llamar al Apps Script cuando no cuadra, con 700 ms de espera para frenar los intentos a lo bruto. Lo que se protege es el endpoint, no solo la pantalla: saltarse la pantalla de bloqueo desde la consola del navegador no sirve de nada.
+
+Para cambiar el código, cambia `APP_PIN` en Netlify, vuelve a desplegar y mételo de nuevo en cada dispositivo. El botón **«Olvidar el código en este móvil»** del Historial lo borra de ese dispositivo.
 
 ### 3. Instalar en el móvil
 
@@ -183,6 +192,8 @@ Las medias del dashboard van **ponderadas por kilómetros**: el €/km de un com
 ## La app por dentro
 
 Seis módulos en un carril horizontal con `scroll-snap`, así que el deslizamiento lo resuelve el navegador y en iOS va como una app nativa. Abajo, una barra de pestañas; en escritorio funcionan además las flechas del teclado y unos botones laterales, y el contenido se queda en una columna centrada en lugar de estirarse. Los gráficos de cada módulo se dibujan la primera vez que se entra.
+
+Los datos se actualizan de tres maneras: tirando hacia abajo en cualquier módulo, al volver a la app después de tenerla en segundo plano y con el botón del Historial. El gesto solo entra cuando el módulo está arriba del todo y el dedo baja en vertical, así que el deslizamiento lateral entre módulos sigue intacto.
 
 <table>
   <tr>
@@ -276,7 +287,7 @@ npm test              # motor de cálculo y agregados del dashboard, sin depende
 node test/pantalla.js # prueba de humo en Chromium (necesita playwright y chart.js)
 ```
 
-`test/motor.test.js` carga `Script.Repostaje.gs` con un Sheet simulado, así que prueba el código que se despliega, no una copia. `test/dashboard.test.js` extrae el `<script>` de `index.html` y comprueba los agregados con datos de ejemplo.
+`test/motor.test.js` carga `Script.Repostaje.gs` con un Sheet simulado, así que prueba el código que se despliega, no una copia. `test/dashboard.test.js` extrae el `<script>` de `index.html` y comprueba los agregados con datos de ejemplo. `test/seguridad.test.js` mete peticiones simuladas en la función de Netlify de verdad y comprueba que sin código no se llega al Apps Script. La prueba de humo recorre además la pantalla de bloqueo, el gesto de tirar hacia abajo y el borrado.
 
 ---
 

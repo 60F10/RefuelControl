@@ -20,7 +20,7 @@ const CAPTURAS = path.join(__dirname, 'capturas');
 
 // Los repostajes reales, más unos cuantos inventados para que salgan el punto de
 // equilibrio, el ahorro, la desviación por estación y el coste de oportunidad.
-const REGISTROS = [
+let REGISTROS = [
   r('REP-000001', '2026-06-26', 'GLP',         44.02, 0.929, 40.89, { kmTotales: 3049 }),
   r('REP-000001', '2026-06-26', 'Gasolina 98', 41.04, 1.535, 63.00, { kmTotales: 3049 }),
   r('REP-915015', '2026-07-31', 'GLP',         33.71, 0.898, 30.27, { kmTotales: 3803, kmTramo: 754 }),
@@ -76,21 +76,55 @@ const TIPOS = {
   '.png': 'image/png'
 };
 
+// El código que espera la API simulada, como el APP_PIN de Netlify.
+const CODIGO = 'codigo-de-prueba';
+let lecturas = 0;              // veces que se ha pedido el dashboard
+
 const servidor = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
   if (url.pathname === '/api/repostaje') {
+    const json = (estado, cuerpo) => {
+      res.writeHead(estado, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify(cuerpo));
+    };
+
+    // Igual que el proxy de Netlify: sin el código no se ve nada.
+    if (req.headers['x-codigo'] !== CODIGO) {
+      return json(401, { ok: false, error: 'Código incorrecto.', noAutorizado: true });
+    }
+
+    if (req.method === 'POST') {
+      let crudo = '';
+      req.on('data', t => crudo += t);
+      req.on('end', () => {
+        const cuerpo = JSON.parse(crudo || '{}');
+        if (cuerpo.action === 'borrar') {
+          const antes = REGISTROS.length;
+          REGISTROS = REGISTROS.filter(x => x.id !== cuerpo.id);
+          return json(200, {
+            ok: true, id: cuerpo.id, filasBorradas: antes - REGISTROS.length,
+            nota: 'Siguen en la copia de seguridad.', ordenAvisos: []
+          });
+        }
+        json(200, { ok: true });
+      });
+      return;
+    }
+
     const accion = url.searchParams.get('action');
-    const cuerpo = accion === 'export'
-      ? { ok: true, csv: 'ID;Tipo\r\nREP-000001;GLP', nombre: 'prueba.csv', filas: 1 }
-      : {
-          ok: true, registros: REGISTROS, depositos: DEPOSITOS,
-          estaciones: ['E.S.DISA Padre Anchieta', 'E.S. Repsol La Laguna'],
-          ubicaciones: [{ estacion: 'E.S.DISA Padre Anchieta', lat: 28.4823, lon: -16.3211 }],
-          version: '5.1', actualizado: '29/08/2026 12:00'
-        };
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify(cuerpo));
+    if (accion === 'comprobar') return json(200, { ok: true, comprobado: true });
+    if (accion === 'export') {
+      return json(200, { ok: true, csv: 'ID;Tipo\r\nREP-000001;GLP', nombre: 'prueba.csv', filas: 1 });
+    }
+
+    lecturas++;
+    return json(200, {
+      ok: true, registros: REGISTROS, depositos: DEPOSITOS,
+      estaciones: ['E.S.DISA Padre Anchieta', 'E.S. Repsol La Laguna'],
+      ubicaciones: [{ estacion: 'E.S.DISA Padre Anchieta', lat: 28.4823, lon: -16.3211 }],
+      version: '5.1', actualizado: '29/08/2026 12:00'
+    });
   }
 
   const rel = url.pathname === '/' ? '/index.html' : url.pathname;
@@ -108,7 +142,7 @@ const MODULOS = ['repostar', 'resumen', 'consumos', 'estaciones', 'historial', '
   fs.mkdirSync(CAPTURAS, { recursive: true });
   await new Promise(ok => servidor.listen(8765, ok));
 
-  const navegador = await chromium.launch();
+  const navegador = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   // Contexto de móvil de verdad: con hasTouch las reglas @media (hover:hover)
   // no aplican, que es como se ve en el iPhone y en el Android.
   const contexto = await navegador.newContext({
@@ -118,8 +152,18 @@ const MODULOS = ['repostar', 'resumen', 'consumos', 'estaciones', 'historial', '
   const pagina = await contexto.newPage();
 
   const errores = [];
+  // El 401 de la prueba del código equivocado es a propósito: el navegador lo
+  // pinta en consola y no cuenta como fallo.
+  let esperando401 = false;
+  // El navegador pide de vez en cuando un favicon que el sitio no tiene: ese
+  // 404 no es un fallo de la app.
+  const ruido = m => /favicon/.test((m.location() || {}).url || '');
   pagina.on('pageerror', e => errores.push('JS: ' + e.message));
-  pagina.on('console', m => { if (m.type() === 'error') errores.push('consola: ' + m.text()); });
+  pagina.on('console', m => {
+    if (m.type() !== 'error' || ruido(m)) return;
+    if (esperando401 && /401/.test(m.text())) return;
+    errores.push('consola: ' + m.text());
+  });
 
   // El contenedor de pruebas no llega al CDN: servimos Chart.js desde node_modules.
   const CHART = path.join(RAIZ, 'node_modules', 'chart.js', 'dist', 'chart.umd.js');
@@ -141,6 +185,29 @@ const MODULOS = ['repostar', 'resumen', 'consumos', 'estaciones', 'historial', '
     servidor.close();
     process.exit(1);
   };
+
+  // ---- Pantalla de bloqueo ----
+  const bloqueoVisible = () => pagina.$eval('#bloqueo', el => el.classList.contains('on'));
+
+  if (!await bloqueoVisible()) await fallar('La app se abrió sin pedir el código.');
+  if (lecturas !== 0) await fallar('Pidió el dashboard antes de tener código.');
+  await pagina.screenshot({ path: path.join(CAPTURAS, '0-bloqueo.png') });
+
+  esperando401 = true;
+  await pagina.fill('#inCodigo', 'esto-no-es');
+  await pagina.click('#btnEntrar');
+  await pagina.waitForTimeout(500);
+  esperando401 = false;
+  if (!await bloqueoVisible()) await fallar('Entró con un código equivocado.');
+  const avisoCodigo = await pagina.$eval('#estadoBloqueo', el => el.innerText.trim());
+  if (!avisoCodigo) await fallar('Un código equivocado no dice nada.');
+  console.log('Bloqueo: con un código malo dice «' + avisoCodigo + '».');
+
+  await pagina.fill('#inCodigo', 'codigo-de-prueba');
+  await pagina.click('#btnEntrar');
+  await pagina.waitForTimeout(1200);
+  if (await bloqueoVisible()) await fallar('Con el código bueno no dejó entrar.');
+  if (lecturas === 0) await fallar('Entró pero no cargó el dashboard.');
 
   // ---- La barra de módulos existe ----
   const botones = await pagina.$$eval('#barra button', els => els.map(e => e.textContent.trim()));
@@ -233,6 +300,54 @@ const MODULOS = ['repostar', 'resumen', 'consumos', 'estaciones', 'historial', '
   const trasSwipe = await pagina.$$eval('#barra button', els => els.findIndex(e => e.classList.contains('on')));
   if (trasSwipe !== 2) await fallar('Al deslizar, la barra no siguió al carril (marcó el ' + trasSwipe + ').');
 
+  // ---- Tirar hacia abajo actualiza ----
+  await pagina.click('#barra button:nth-child(5)');
+  await pagina.waitForTimeout(500);
+  const lecturasAntesPtr = lecturas;
+  await pagina.evaluate(async () => {
+    const mod = document.getElementById('mod-historial');
+    mod.scrollTop = 0;
+    const toca = (tipo, y) => {
+      const t = new Touch({ identifier: 1, target: mod, clientX: 195, clientY: y });
+      const vacio = tipo === 'touchend';
+      mod.dispatchEvent(new TouchEvent(tipo, {
+        touches: vacio ? [] : [t], targetTouches: vacio ? [] : [t],
+        changedTouches: [t], bubbles: true, cancelable: true
+      }));
+    };
+    const pausa = ms => new Promise(ok => setTimeout(ok, ms));
+    toca('touchstart', 120); await pausa(30);
+    toca('touchmove', 145);  await pausa(30);   // primero decide que el gesto es vertical
+    toca('touchmove', 240);  await pausa(30);
+    toca('touchmove', 340);  await pausa(30);
+    toca('touchend', 340);
+  });
+  await pagina.waitForTimeout(1600);
+  if (lecturas <= lecturasAntesPtr) await fallar('Tirar hacia abajo no recargó los datos.');
+  console.log('Gesto: tirar hacia abajo pidió el dashboard otra vez.');
+
+  // ---- Volver a la app también refresca ----
+  const lecturasAntesVis = lecturas;
+  await pagina.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  });
+  await pagina.waitForTimeout(1200);
+  if (lecturas <= lecturasAntesVis) await fallar('Volver a la app no refrescó los datos.');
+  console.log('Reanudar: al volver a la app se recargan los datos solos.');
+
+  // ---- Borrar refresca la lista sin darle a «Actualizar» ----
+  const antesBorrar = await pagina.$$eval('#listaRepostajes .rep', e => e.length);
+  await pagina.click('[data-borrar="REP-100002"]');
+  await pagina.waitForTimeout(400);
+  await pagina.click('#modalSi');
+  await pagina.waitForTimeout(1800);
+  const despuesBorrar = await pagina.$$eval('#listaRepostajes .rep', e => e.length);
+  const fantasma = await pagina.$$eval('[data-borrar="REP-100002"]', e => e.length);
+  if (fantasma || despuesBorrar !== antesBorrar - 1) {
+    await fallar('Tras borrar, la tarjeta sigue en pantalla (' + antesBorrar + ' -> ' + despuesBorrar + ').');
+  }
+  console.log('Borrado: la lista pasó de ' + antesBorrar + ' a ' + despuesBorrar + ' sin tocar «Actualizar».');
+
   // ---- En el móvil no deben verse las flechas de escritorio ----
   const flechaEnMovil = await pagina.$eval('#flechaDer', el => getComputedStyle(el).display);
   if (flechaEnMovil !== 'none') {
@@ -241,9 +356,13 @@ const MODULOS = ['repostar', 'resumen', 'consumos', 'estaciones', 'historial', '
 
   // ---- Escritorio: ratón, flechas visibles y teclado ----
   const escritorio = await navegador.newContext({ viewport: { width: 1280, height: 860 }, locale: 'es-ES' });
+  // El código ya guardado: en escritorio se comprueba la maquetación, no el bloqueo.
+  await escritorio.addInitScript(codigo => {
+    try { localStorage.setItem('refuelcontrol.codigo', codigo); } catch (err) {}
+  }, CODIGO);
   const pc = await escritorio.newPage();
   pc.on('pageerror', e => errores.push('JS escritorio: ' + e.message));
-  pc.on('console', m => { if (m.type() === 'error') errores.push('consola escritorio: ' + m.text()); });
+  pc.on('console', m => { if (m.type() === 'error' && !ruido(m)) errores.push('consola escritorio: ' + m.text()); });
   await pc.route('**/cdnjs.cloudflare.com/**', ruta => ruta.fulfill({
     status: 200, contentType: 'text/javascript; charset=utf-8', body: fs.readFileSync(CHART, 'utf8')
   }));
