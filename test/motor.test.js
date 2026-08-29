@@ -99,6 +99,7 @@ function crearLibro(hojaPrincipal) {
   const hojas = [hojaPrincipal];
   return {
     hojas,
+    getId: () => 'libro-de-prueba',
     getSheetByName: n => hojas.filter(h => h.getName() === n)[0] || null,
     getSheets: () => hojas,
     insertSheet(n) {
@@ -109,19 +110,116 @@ function crearLibro(hojaPrincipal) {
   };
 }
 
-function cargarBackend(libro) {
+// ============================================================
+//  Drive y disparadores simulados
+// ============================================================
+
+function crearDrive() {
+  let reloj = Date.now();
+  const carpetas = {};
+
+  function nuevaCarpeta(nombre) {
+    const archivos = [];
+    const carpeta = {
+      _archivos: archivos,
+      getName: () => nombre,
+      getFiles: () => iterador(archivos.filter(f => !f._papelera)),
+      getFoldersByName: n => iterador(carpetas[n] ? [carpetas[n]] : []),
+      createFolder(n) { carpetas[n] = nuevaCarpeta(n); return carpetas[n]; },
+      _meter(archivo) { archivos.push(archivo); return archivo; }
+    };
+    carpetas[nombre] = carpeta;
+    return carpeta;
+  }
+
+  function iterador(lista) {
+    let i = 0;
+    return { hasNext: () => i < lista.length, next: () => lista[i++] };
+  }
+
+  function nuevoArchivo(nombre, creado) {
+    return {
+      _papelera: false,
+      getName: () => nombre,
+      getUrl: () => 'https://drive.google.com/file/d/' + nombre,
+      getDateCreated: () => new Date(creado),
+      setTrashed(v) { this._papelera = !!v; return this; }
+    };
+  }
+
+  const raiz = nuevaCarpeta('Mi unidad');
+  const carpetaLibro = nuevaCarpeta('Coche');
+
+  return {
+    _raiz: raiz,
+    _carpetas: carpetas,
+    _avanzarReloj: ms => { reloj += ms; },
+    getRootFolder: () => raiz,
+    getFileById: () => ({
+      getParents: () => iterador([carpetaLibro]),
+      makeCopy(nombre, carpeta) {
+        reloj += 1000;
+        return carpeta._meter(nuevoArchivo(nombre, reloj));
+      }
+    }),
+    _nuevoArchivo: nuevoArchivo
+  };
+}
+
+function crearScriptApp() {
+  let disparadores = [];
+  let id = 0;
+  return {
+    _disparadores: () => disparadores.slice(),
+    _fallar: false,
+    WeekDay: { MONDAY: 'MONDAY' },
+    getProjectTriggers: () => disparadores.slice(),
+    deleteTrigger(t) { disparadores = disparadores.filter(x => x !== t); },
+    newTrigger(fn) {
+      const self = this;
+      const t = { id: ++id, getHandlerFunction: () => fn };
+      const constructor = {
+        timeBased: () => constructor,
+        onWeekDay: () => constructor,
+        atHour: () => constructor,
+        create() {
+          if (self._fallar) throw new Error('No tienes permiso para crear disparadores');
+          disparadores.push(t);
+          return t;
+        }
+      };
+      return constructor;
+    }
+  };
+}
+
+function cargarBackend(libro, extras) {
   const codigo = fs.readFileSync(RUTA_GS, 'utf8');
+  const propiedades = {};
   const contexto = {
-    console,
-    PropertiesService: { getScriptProperties: () => ({ getProperty: () => '' }) },
+    console: { log() {}, error() {} },
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: k => (propiedades[k] === undefined ? null : propiedades[k]),
+        setProperty(k, v) { propiedades[k] = String(v); return this; },
+        deleteProperty(k) { delete propiedades[k]; return this; }
+      })
+    },
     SpreadsheetApp: {
       getActiveSpreadsheet: () => libro,
       flush() {},
       getUi() { throw new Error('sin interfaz'); }
     },
-    DriveApp: {},
+    DriveApp: (extras && extras.drive) || crearDrive(),
+    ScriptApp: (extras && extras.scriptApp) || crearScriptApp(),
     UrlFetchApp: {},
-    ContentService: { MimeType: {}, createTextOutput: t => t },
+    ContentService: {
+      MimeType: { JSON: 'application/json', JAVASCRIPT: 'text/javascript' },
+      createTextOutput(t) {
+        const salida = { _texto: t, setMimeType: () => salida, getContent: () => t, toString: () => t };
+        return salida;
+      }
+    },
     Utilities: {
       formatDate(fecha, zona, patron) {
         const p = n => String(n).padStart(2, '0');
@@ -183,10 +281,10 @@ function fila(o) {
   return f;
 }
 
-function montar(filas) {
+function montar(filas, extras) {
   const hoja = crearHoja('Registro de Repostajes', [CAB].concat(filas), CAB.length);
   const libro = crearLibro(hoja);
-  const backend = cargarBackend(libro);
+  const backend = cargarBackend(libro, extras);
   return { hoja, libro, backend, datos: () => hoja._datos.slice(1) };
 }
 
@@ -559,6 +657,151 @@ prueba('Recalcular dos veces no reabre ni duplica nada en la copia', () => {
   assert.strictEqual(c.length, 2);
   assert.strictEqual(c.filter(f => f[I.ID] === 'B')[0][BAJA].getTime(), antes.getTime(),
     'la fecha de baja no se reescribe en cada recálculo');
+});
+
+// ============================================================
+//  Copia semanal del libro entero
+// ============================================================
+
+function copiasDe(drive) {
+  const carpeta = drive._carpetas['RefuelControl · Copias de seguridad'];
+  return carpeta ? carpeta._archivos.filter(f => !f._papelera) : [];
+}
+
+prueba('La copia del libro va a su carpeta, con fecha en el nombre', () => {
+  const drive = crearDrive();
+  const m = montar([fila({ id: 'A', tipo: 'GLP', litros: 40, total: 36, km: 1000 })], { drive });
+  const r = m.backend.copiaSeguridadDelLibro();
+
+  assert.strictEqual(r.ok, true);
+  assert.ok(/^RefuelControl_\d{4}-\d{2}-\d{2}_\d{4}$/.test(r.nombre), 'nombre raro: ' + r.nombre);
+  assert.strictEqual(r.carpeta, 'RefuelControl · Copias de seguridad');
+  assert.strictEqual(copiasDe(drive).length, 1);
+});
+
+prueba('La carpeta de copias se reutiliza, no se crea una por copia', () => {
+  const drive = crearDrive();
+  const m = montar([], { drive });
+  m.backend.copiaSeguridadDelLibro();
+  m.backend.copiaSeguridadDelLibro();
+  m.backend.copiaSeguridadDelLibro();
+  assert.strictEqual(copiasDe(drive).length, 3, 'las tres van a la misma carpeta');
+});
+
+prueba('Solo se conservan las ocho últimas copias', () => {
+  const drive = crearDrive();
+  const m = montar([], { drive });
+  for (let i = 0; i < 11; i++) m.backend.copiaSeguridadDelLibro();
+
+  const vivas = copiasDe(drive);
+  assert.strictEqual(vivas.length, 8, 'quedan ocho, no ' + vivas.length);
+
+  // Y las que quedan son las más nuevas
+  const fechas = vivas.map(f => f.getDateCreated().getTime()).sort((a, b) => a - b);
+  const todas = drive._carpetas['RefuelControl · Copias de seguridad']._archivos
+    .map(f => f.getDateCreated().getTime()).sort((a, b) => a - b);
+  assert.strictEqual(fechas[0], todas[todas.length - 8], 'se han borrado las viejas, no las nuevas');
+});
+
+prueba('La rotación no toca archivos que no sean copias nuestras', () => {
+  const drive = crearDrive();
+  const m = montar([], { drive });
+  m.backend.copiaSeguridadDelLibro();
+
+  const carpeta = drive._carpetas['RefuelControl · Copias de seguridad'];
+  carpeta._meter(drive._nuevoArchivo('Notas del coche.pdf', Date.now() - 999999));
+  for (let i = 0; i < 10; i++) m.backend.copiaSeguridadDelLibro();
+
+  const nombres = copiasDe(drive).map(f => f.getName());
+  assert.ok(nombres.indexOf('Notas del coche.pdf') >= 0, 'un archivo ajeno acabó en la papelera');
+});
+
+prueba('El disparador semanal se programa y hace una primera copia', () => {
+  const drive = crearDrive();
+  const scriptApp = crearScriptApp();
+  const m = montar([], { drive, scriptApp });
+
+  const r = m.backend.programarCopiaSemanal();
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(scriptApp._disparadores().length, 1);
+  assert.strictEqual(scriptApp._disparadores()[0].getHandlerFunction(), 'copiaSemanal');
+  assert.strictEqual(copiasDe(drive).length, 1, 'no hay que esperar al lunes para tener la primera');
+});
+
+prueba('Programarlo dos veces no duplica el disparador', () => {
+  const scriptApp = crearScriptApp();
+  const m = montar([], { scriptApp });
+  m.backend.programarCopiaSemanal();
+  const r = m.backend.programarCopiaSemanal();
+  assert.strictEqual(r.yaEstaba, true);
+  assert.strictEqual(scriptApp._disparadores().length, 1);
+});
+
+prueba('Cancelarlo lo quita, y cancelarlo dos veces no rompe', () => {
+  const scriptApp = crearScriptApp();
+  const m = montar([], { scriptApp });
+  m.backend.programarCopiaSemanal();
+  assert.strictEqual(m.backend.cancelarCopiaSemanal().ok, true);
+  assert.strictEqual(scriptApp._disparadores().length, 0);
+  assert.strictEqual(m.backend.cancelarCopiaSemanal().noHabia, true);
+});
+
+prueba('Sin permiso para crear disparadores se explica, no se revienta', () => {
+  const scriptApp = crearScriptApp();
+  scriptApp._fallar = true;
+  const m = montar([], { scriptApp });
+  const r = m.backend.programarCopiaSemanal();
+  assert.strictEqual(r.ok, false);
+  assert.ok(/permiso/i.test(r.error));
+});
+
+prueba('La copia semanal nunca lanza: si falla, lo deja anotado', () => {
+  const drive = crearDrive();
+  drive.getFileById = () => { throw new Error('Drive no responde'); };
+  const m = montar([], { drive });
+
+  const r = m.backend.copiaSemanal();
+  assert.strictEqual(r.ok, false);
+  assert.ok(/Drive no responde/.test(r.error));
+  assert.ok(/Drive no responde/.test(m.backend.estadoCopias().ultimoError));
+});
+
+prueba('El estado dice si está programada y cuándo fue la última', () => {
+  const scriptApp = crearScriptApp();
+  const m = montar([], { scriptApp });
+
+  let e = m.backend.estadoCopias();
+  assert.strictEqual(e.programada, false);
+  assert.strictEqual(e.ultima, '');
+  assert.strictEqual(e.conservadas, 8);
+
+  m.backend.programarCopiaSemanal();
+  e = m.backend.estadoCopias();
+  assert.strictEqual(e.programada, true);
+  assert.ok(e.ultima, 'debería recordar cuándo fue la primera copia');
+});
+
+prueba('El ping informa del estado de las copias', () => {
+  const m = montar([]);
+  const salida = m.backend.doGet({ parameter: { action: 'ping', token: '' } });
+  const r = JSON.parse(String(salida));
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.version, '5.1');
+  assert.ok(r.copias, 'el ping debe traer el estado de las copias');
+});
+
+prueba('Una pestaña de copia creada a mano y vacía recibe su cabecera', () => {
+  const hoja = crearHoja('Registro de Repostajes',
+    [CAB, fila({ id: 'A', tipo: 'GLP', litros: 40, total: 36, km: 1000 })], CAB.length);
+  const libro = crearLibro(hoja);
+  libro.insertSheet('Copia de seguridad');      // en blanco, como la crearía una persona
+  const backend = cargarBackend(libro);
+
+  backend.recalcularTodo();
+  const copia = libro.getSheetByName('Copia de seguridad');
+  assert.strictEqual(copia._datos[0][0], 'ID', 'le falta la cabecera');
+  assert.strictEqual(copia._datos[0][BORRADO], 'Borrado');
+  assert.strictEqual(copia._datos[1][0], 'A', 'y la fila debajo');
 });
 
 // ============================================================

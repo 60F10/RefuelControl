@@ -20,10 +20,13 @@
  *   Un repostaje parcial no cierra la ventana: sus litros y sus euros se
  *   arrastran al siguiente llenado de ese mismo combustible.
  *
- * COPIA DE SEGURIDAD
- *   La hoja «Copia de seguridad» guarda TODOS los repostajes que han existido,
- *   con una columna que dice si siguen vivos o se borraron. Se sincroniza sola
- *   en cada recalcularTodo(), así que nunca se pierde una fila por un borrado.
+ * DOS COPIAS DE SEGURIDAD, PARA DOS SUSTOS DISTINTOS
+ *   1. La hoja «Copia de seguridad» guarda TODAS las filas que han existido, con
+ *      una columna que dice si siguen vivas o se borraron. Se sincroniza sola en
+ *      cada recalcularTodo(), así que un borrado desde la app nunca pierde datos.
+ *   2. La copia semanal duplica el LIBRO ENTERO en una carpeta de Drive y conserva
+ *      las 8 últimas. Esa protege de perder la hoja de cálculo completa.
+ *      Se programa desde el menú ⛽ RefuelControl > Programar copia semanal.
  */
 
 // ============================================================
@@ -44,7 +47,13 @@ const HOJA_DATOS  = 'Registro de Repostajes';
 const HOJA_COPIA  = 'Copia de seguridad';
 const MODELO      = 'gemini-2.5-flash';
 const ZONA        = 'Atlantic/Canary';
-const VERSION     = '5.0';
+const VERSION     = '5.1';
+
+// Copia semanal del libro entero
+const CARPETA_COPIAS     = 'RefuelControl · Copias de seguridad';
+const COPIAS_A_CONSERVAR = 8;                  // unas ocho semanas de historial
+const DISPARADOR_COPIA   = 'copiaSemanal';     // nombre de la función que dispara
+const PREFIJO_COPIA      = 'RefuelControl_';
 
 // Capacidad útil de los depósitos, en litros. La de gasolina es la de ficha; la
 // de GLP se ajustó a lo que de verdad entra (el máximo repostado fueron 44,02 L).
@@ -86,7 +95,7 @@ function doGet(e) {
     switch (e.parameter.action) {
       case 'dashboard': return jsonOut(Object.assign({ ok: true }, getDashboardData()), cb);
       case 'export':    return jsonOut(Object.assign({ ok: true }, exportarCSV()), cb);
-      case 'ping':      return jsonOut({ ok: true, version: VERSION, drive: diagnosticoDrive() }, cb);
+      case 'ping':      return jsonOut({ ok: true, version: VERSION, drive: diagnosticoDrive(), copias: estadoCopias() }, cb);
       default:          return jsonOut({ ok: true, status: 'ok' }, cb);
     }
   } catch (err) {
@@ -629,16 +638,163 @@ function recalcularTodo() {
 function getHojaCopia() {
   const libro = SpreadsheetApp.getActiveSpreadsheet();
   let hoja = libro.getSheetByName(HOJA_COPIA);
-  if (!hoja) {
-    hoja = libro.insertSheet(HOJA_COPIA);
+  if (!hoja) hoja = libro.insertSheet(HOJA_COPIA);
+
+  if (CABECERAS_COPIA.length > hoja.getMaxColumns()) {
+    hoja.insertColumnsAfter(hoja.getMaxColumns(), CABECERAS_COPIA.length - hoja.getMaxColumns());
+  }
+  // Si la pestaña la creó una persona a mano, puede estar en blanco: le ponemos
+  // la cabecera igual, para no acabar escribiendo datos bajo columnas sin nombre.
+  if (hoja.getRange(1, 1).getValue() !== 'ID') {
     hoja.getRange(1, 1, 1, CABECERAS_COPIA.length).setValues([CABECERAS_COPIA])
         .setFontWeight('bold').setBackground('#1E1E1E').setFontColor('#FFFFFF');
     hoja.setFrozenRows(1);
   }
-  if (CABECERAS_COPIA.length > hoja.getMaxColumns()) {
-    hoja.insertColumnsAfter(hoja.getMaxColumns(), CABECERAS_COPIA.length - hoja.getMaxColumns());
-  }
   return hoja;
+}
+
+// ============================================================
+//  COPIA SEMANAL DEL LIBRO ENTERO
+//  La hoja «Copia de seguridad» protege de un borrado desde la
+//  app. Esto protege de perder la hoja de cálculo entera.
+// ============================================================
+
+/** La carpeta de copias vive al lado del propio libro. Se crea si no existe. */
+function carpetaDeCopias() {
+  const archivo = DriveApp.getFileById(SpreadsheetApp.getActiveSpreadsheet().getId());
+  const padres = archivo.getParents();
+  const raiz = padres.hasNext() ? padres.next() : DriveApp.getRootFolder();
+  const existentes = raiz.getFoldersByName(CARPETA_COPIAS);
+  return existentes.hasNext() ? existentes.next() : raiz.createFolder(CARPETA_COPIAS);
+}
+
+/** Duplica el libro y manda a la papelera las copias que sobran. */
+function copiaSeguridadDelLibro() {
+  const libro = SpreadsheetApp.getActiveSpreadsheet();
+  const carpeta = carpetaDeCopias();
+  const nombre = PREFIJO_COPIA + Utilities.formatDate(new Date(), ZONA, 'yyyy-MM-dd_HHmm');
+  const copia = DriveApp.getFileById(libro.getId()).makeCopy(nombre, carpeta);
+  const borradas = rotarCopias(carpeta);
+
+  PROPS.setProperty('ULTIMA_COPIA', new Date().toISOString());
+  return { ok: true, nombre, url: copia.getUrl(), carpeta: carpeta.getName(), borradas };
+}
+
+/** Deja solo las COPIAS_A_CONSERVAR más recientes. Devuelve cuántas ha retirado. */
+function rotarCopias(carpeta) {
+  const archivos = [];
+  const it = carpeta.getFiles();
+  while (it.hasNext()) {
+    const f = it.next();
+    if (f.getName().indexOf(PREFIJO_COPIA) === 0) archivos.push(f);
+  }
+  archivos.sort((a, b) => b.getDateCreated() - a.getDateCreated());
+
+  let borradas = 0;
+  archivos.slice(COPIAS_A_CONSERVAR).forEach(f => { f.setTrashed(true); borradas++; });
+  return borradas;
+}
+
+/** La que ejecuta el disparador. Nunca lanza: si falla, lo deja en el registro. */
+function copiaSemanal() {
+  try {
+    const r = copiaSeguridadDelLibro();
+    console.log('Copia creada: ' + r.nombre +
+                (r.borradas ? ' · ' + r.borradas + ' antiguas a la papelera' : ''));
+    return r;
+  } catch (err) {
+    console.error('Falló la copia semanal: ' + err.message);
+    PROPS.setProperty('ULTIMA_COPIA_ERROR', new Date().toISOString() + ' · ' + err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+function disparadorDeCopia() {
+  const lista = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === DISPARADOR_COPIA);
+  return lista.length ? lista[0] : null;
+}
+
+function programarCopiaSemanal() {
+  const ui = interfaz();
+  try {
+    if (disparadorDeCopia()) {
+      if (ui) ui.alert('La copia semanal ya está programada.\n\n' + resumenCopias());
+      return { ok: true, yaEstaba: true };
+    }
+    ScriptApp.newTrigger(DISPARADOR_COPIA)
+      .timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(4).create();
+
+    const r = copiaSeguridadDelLibro();   // una primera copia, para no esperar al lunes
+    if (ui) {
+      ui.alert('Copia semanal programada para los lunes de madrugada.\n\n' +
+               'Acabo de hacer la primera: ' + r.nombre + '\n' +
+               'Carpeta: ' + r.carpeta + '\n\n' +
+               'Se conservan las ' + COPIAS_A_CONSERVAR + ' últimas.');
+    }
+    return { ok: true, primera: r };
+  } catch (err) {
+    if (ui) {
+      ui.alert('No pude crear el disparador:\n\n' + err.message + '\n\n' +
+               'Si es un problema de permisos, añade este scope a appsscript.json:\n' +
+               'https://www.googleapis.com/auth/script.scriptapp\n\n' +
+               'O créalo a mano en el editor: Activadores → Añadir activador → ' +
+               'función «copiaSemanal», origen «Según tiempo», tipo «Temporizador semanal».');
+    }
+    return { ok: false, error: err.message };
+  }
+}
+
+function cancelarCopiaSemanal() {
+  const ui = interfaz();
+  const t = disparadorDeCopia();
+  if (!t) {
+    if (ui) ui.alert('No había ninguna copia semanal programada.');
+    return { ok: true, noHabia: true };
+  }
+  ScriptApp.deleteTrigger(t);
+  if (ui) ui.alert('Copia semanal cancelada.\n\nLas copias ya hechas siguen en Drive.');
+  return { ok: true };
+}
+
+/** Copia a demanda desde el menú. */
+function copiaSeguridadAhora() {
+  const ui = interfaz();
+  try {
+    const r = copiaSeguridadDelLibro();
+    if (ui) {
+      ui.alert('Copia creada.\n\n' + r.nombre + '\nCarpeta: ' + r.carpeta +
+               (r.borradas ? '\n\n' + r.borradas + ' copias antiguas a la papelera.' : ''));
+    }
+    return r;
+  } catch (err) {
+    if (ui) ui.alert('No se pudo copiar el libro:\n\n' + err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
+function resumenCopias() {
+  const ultima = PROPS.getProperty('ULTIMA_COPIA');
+  const error = PROPS.getProperty('ULTIMA_COPIA_ERROR');
+  return 'Última copia: ' + (ultima ? new Date(ultima).toLocaleString('es-ES') : 'ninguna todavía') +
+         (error ? '\nÚltimo fallo: ' + error : '');
+}
+
+/** Estado de las copias, para el ping y para el menú. */
+function estadoCopias() {
+  const ultima = PROPS.getProperty('ULTIMA_COPIA');
+  let programada = null;
+  try { programada = !!disparadorDeCopia(); } catch (err) { programada = null; }
+  return {
+    programada,
+    ultima: ultima || '',
+    conservadas: COPIAS_A_CONSERVAR,
+    ultimoError: PROPS.getProperty('ULTIMA_COPIA_ERROR') || ''
+  };
+}
+
+/** SpreadsheetApp.getUi() revienta cuando no hay hoja abierta (disparador, web app). */
+function interfaz() {
+  try { return SpreadsheetApp.getUi(); } catch (err) { return null; }
 }
 
 /** Clave de una fila dentro de la copia: un ticket puede traer dos combustibles. */
@@ -1031,7 +1187,26 @@ function onOpen() {
     .addItem('Probar acceso a Drive', 'probarDrive')
     .addItem('Recalcular todo', 'recalcularTodo')
     .addSeparator()
+    .addSubMenu(SpreadsheetApp.getUi().createMenu('Copias de seguridad')
+      .addItem('Copiar el libro ahora', 'copiaSeguridadAhora')
+      .addItem('Programar copia semanal', 'programarCopiaSemanal')
+      .addItem('Cancelar copia semanal', 'cancelarCopiaSemanal')
+      .addItem('Ver estado', 'verEstadoCopias'))
+    .addSeparator()
     .addItem('Actualizar esquema', 'actualizarEsquema')
     .addItem('Migrar esquema antiguo', 'migrarEsquema')
     .addToUi();
+}
+
+function verEstadoCopias() {
+  const e = estadoCopias();
+  const ui = interfaz();
+  const texto =
+    'Copia semanal: ' + (e.programada === null ? 'no lo puedo comprobar'
+                        : e.programada ? 'programada (lunes de madrugada)' : 'sin programar') + '\n' +
+    'Última copia: ' + (e.ultima ? new Date(e.ultima).toLocaleString('es-ES') : 'ninguna todavía') + '\n' +
+    'Se conservan las ' + e.conservadas + ' últimas, en «' + CARPETA_COPIAS + '».' +
+    (e.ultimoError ? '\n\nÚltimo fallo: ' + e.ultimoError : '');
+  if (ui) ui.alert(texto); else console.log(texto);
+  return e;
 }

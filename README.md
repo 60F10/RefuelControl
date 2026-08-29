@@ -67,18 +67,19 @@ Sin base de datos propia, sin servidor que mantener y con coste cero dentro de l
    | `SHARED_TOKEN` | una cadena larga y aleatoria que inventes |
    | `CARPETA_RECIBOS_ID` | el ID de la carpeta de Drive donde guardar los tickets |
 
-4. Marca **Mostrar el archivo de manifiesto `appsscript.json`** y añade los permisos:
+4. Marca **Mostrar el archivo de manifiesto `appsscript.json`** y pega el del repo. Los permisos son estos:
 
    ```json
    "oauthScopes": [
      "https://www.googleapis.com/auth/drive",
      "https://www.googleapis.com/auth/spreadsheets",
      "https://www.googleapis.com/auth/script.external_request",
-     "https://www.googleapis.com/auth/script.container.ui"
+     "https://www.googleapis.com/auth/script.container.ui",
+     "https://www.googleapis.com/auth/script.scriptapp"
    ]
    ```
 
-   Sin `auth/drive` el script guarda los datos pero no las fotos, y falla en silencio.
+   Sin `auth/drive` el script guarda los datos pero no las fotos, y falla en silencio. `script.scriptapp` solo hace falta para programar la copia semanal desde el menú; sin él, el disparador se crea a mano desde el editor.
 
 5. Recarga la hoja y usa el menú **⛽ RefuelControl → Probar acceso a Drive**. Acepta los permisos. Debe responder `ok: true`.
 6. **Implementar → Nueva implementación → Aplicación web**, con `Ejecutar como: Yo` y `Acceso: Cualquiera`. Copia la URL `/exec`.
@@ -205,6 +206,18 @@ Desde el módulo Historial se corrige cualquier campo de un repostaje y se borra
 Borrar no destruye nada: la pestaña «Copia de seguridad» conserva la fila marcada como borrada, con su fecha de baja.
 
 El botón **Exportar CSV** descarga el histórico entero, separado por punto y coma y con coma decimal, listo para abrir en Excel.
+
+---
+
+## Copias de seguridad
+
+Son dos, para dos sustos distintos.
+
+**La pestaña «Copia de seguridad»** protege de un borrado desde la app: conserva todas las filas que han existido, marcadas como vivas o borradas. Se sincroniza sola en cada recálculo.
+
+**La copia semanal** protege de perder la hoja de cálculo entera. Duplica el libro completo en una carpeta de Drive junto al original y conserva las ocho últimas, mandando las viejas a la papelera. Se activa desde el menú **⛽ RefuelControl → Copias de seguridad → Programar copia semanal**, que crea el disparador de los lunes de madrugada y hace la primera copia en el momento. Ese mismo submenú tiene *Copiar el libro ahora*, *Cancelar* y *Ver estado*, y el estado sale también en `?action=ping`.
+
+Si el disparador falla por permisos, el aviso lo dice: hay que añadir el scope `script.scriptapp` al manifiesto o crear el activador a mano desde el editor (función `copiaSemanal`, según tiempo, semanal).
 
 ---
 

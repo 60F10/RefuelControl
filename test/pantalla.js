@@ -87,7 +87,7 @@ const servidor = http.createServer((req, res) => {
           ok: true, registros: REGISTROS, depositos: DEPOSITOS,
           estaciones: ['E.S.DISA Padre Anchieta', 'E.S. Repsol La Laguna'],
           ubicaciones: [{ estacion: 'E.S.DISA Padre Anchieta', lat: 28.4823, lon: -16.3211 }],
-          version: '5.0', actualizado: '29/08/2026 12:00'
+          version: '5.1', actualizado: '29/08/2026 12:00'
         };
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify(cuerpo));
