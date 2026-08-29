@@ -1,14 +1,14 @@
 /**
- * RefuelControl_60F10 — Backend Apps Script  ·  v4
+ * RefuelControl_60F10 — Backend Apps Script  ·  v5
  * Dacia Sandero Stepway ECO-G 120 (bífuel GLP + gasolina)
  *
  * DESPLIEGUE (obligatorio tras cada cambio):
  *   Implementar > Gestionar implementaciones > lápiz > Versión: Nueva versión > Implementar
  *
- * TRAS ACTUALIZAR A v4, una sola vez:
+ * TRAS ACTUALIZAR A v5, una sola vez:
  *   Menú ⛽ RefuelControl > Actualizar esquema
- *   Crea las columnas T (Depósito lleno) y U (Fecha del ticket), marca como
- *   llenos todos los repostajes anteriores y recalcula la hoja entera.
+ *   Crea las columnas T..W, marca como llenos los repostajes anteriores, genera la
+ *   hoja «Copia de seguridad» y recalcula la hoja entera.
  *
  * MODELO DE CÁLCULO
  *   Se resetean los contadores parciales después de cada repostaje, así que la
@@ -19,6 +19,11 @@
  *   desde su último llenado, no contra los del último ticket.
  *   Un repostaje parcial no cierra la ventana: sus litros y sus euros se
  *   arrastran al siguiente llenado de ese mismo combustible.
+ *
+ * COPIA DE SEGURIDAD
+ *   La hoja «Copia de seguridad» guarda TODOS los repostajes que han existido,
+ *   con una columna que dice si siguen vivos o se borraron. Se sincroniza sola
+ *   en cada recalcularTodo(), así que nunca se pierde una fila por un borrado.
  */
 
 // ============================================================
@@ -35,10 +40,16 @@ const CARPETA_RECIBOS_ID = PROPS.getProperty('CARPETA_RECIBOS_ID') || '';
 // false = los contadores son acumulativos (el tramo es la diferencia)
 const CONTADORES_SE_RESETEAN = true;
 
-const HOJA_DATOS = 'Registro de Repostajes';
-const MODELO     = 'gemini-2.5-flash';
-const ZONA       = 'Atlantic/Canary';
-const VERSION    = '4.0';
+const HOJA_DATOS  = 'Registro de Repostajes';
+const HOJA_COPIA  = 'Copia de seguridad';
+const MODELO      = 'gemini-2.5-flash';
+const ZONA        = 'Atlantic/Canary';
+const VERSION     = '5.0';
+
+// Capacidad útil de los depósitos, en litros. La de gasolina es la de ficha; la
+// de GLP se ajustó a lo que de verdad entra (el máximo repostado fueron 44,02 L).
+const DEPOSITO_GLP      = 45;
+const DEPOSITO_GASOLINA = 50;
 
 const CABECERAS = [
   'ID', 'Timestamp', 'Estación', 'Tipo Combustible', 'Litros',
@@ -47,18 +58,22 @@ const CABECERAS = [
   'KM GLP (tramo)', 'KM Gasolina (tramo)', 'Consumo coche (L/100km)',
   'Consumo real (L/100km)', 'Coste por KM real (€/km)', 'Coste por KM coche (€/km)',
   'Enlace Recibo', 'KM de este combustible desde su último repostaje',
-  'Depósito lleno', 'Fecha del ticket'
+  'Depósito lleno', 'Fecha del ticket', 'Latitud', 'Longitud'
 ];
 
 const C = {
   ID: 0, TS: 1, ESTACION: 2, TIPO: 3, LITROS: 4, PRECIO: 5, TOTAL: 6,
   KM_TOTAL: 7, KM_TRAMO: 8, LEC_GLP: 9, LEC_GAS: 10, KM_GLP: 11, KM_GAS: 12,
   CONS_COCHE: 13, CONS_REAL: 14, COSTE_REAL: 15, COSTE_COCHE: 16, RECIBO: 17,
-  KM_CALC: 18, LLENO: 19, FECHA_TICKET: 20
+  KM_CALC: 18, LLENO: 19, FECHA_TICKET: 20, LAT: 21, LON: 22
 };
 
 const COL_LLENO = C.LLENO + 1;               // columna T, 1-indexada
 const COL_FECHA_TICKET = C.FECHA_TICKET + 1; // columna U, 1-indexada
+
+// La copia de seguridad son las mismas columnas más el estado de la fila
+const CABECERAS_COPIA = CABECERAS.concat(['Borrado', 'Fecha de baja']);
+const K = { BORRADO: CABECERAS.length, BAJA: CABECERAS.length + 1 };
 
 // ============================================================
 //  ENTRADA WEB APP
@@ -88,6 +103,8 @@ function doPost(e) {
       case 'subir':    return jsonOut(subirRecibo(body.imagenBase64, body.mimeType));
       case 'analizar': return jsonOut(analizarTicket(body));
       case 'guardar':  return jsonOut(guardarRepostaje(body.datos));
+      case 'editar':   return jsonOut(editarRepostaje(body.datos));
+      case 'borrar':   return jsonOut(borrarRepostaje(body.id));
       default:         return jsonOut({ ok: false, error: 'Acción desconocida: ' + body.action });
     }
   } catch (err) {
@@ -186,6 +203,7 @@ function analizarTicket(body) {
     fechaTicket: fecha ? Utilities.formatDate(fecha, ZONA, 'yyyy-MM-dd') : '',
     items: (datos.items || []).map(normalizarItem),
     estacionesConocidas: listaEstaciones(),
+    ubicaciones: ubicacionesConocidas(),
     ultimoRegistro: resumenUltimoTicket()
   };
 }
@@ -196,7 +214,8 @@ function normalizarItem(it) {
     litros: num(it.litros) || 0,
     precio_litro: num(it.precio_litro) || 0,
     total: num(it.total) || 0,
-    lleno: it.lleno === undefined ? true : esLleno(it.lleno)
+    lleno: it.lleno === undefined ? true : esLleno(it.lleno),
+    consumoCoche: num(it.consumoCoche)
   };
 }
 
@@ -256,6 +275,8 @@ function redondear(v, dec) {
   return Math.round(v * f) / f;
 }
 
+function vacio(v) { return v === null || v === undefined ? '' : v; }
+
 // ============================================================
 //  PASO 3 — GUARDAR
 //  Escribe solo los datos de entrada y deja que recalcularTodo()
@@ -296,30 +317,14 @@ function guardarRepostaje(datos) {
     }
   }
 
-  const filas = items.map(it => {
-    const fila = new Array(CABECERAS.length).fill('');
-    fila[C.ID]           = idRecibo;
-    fila[C.TS]           = ahora;
-    fila[C.ESTACION]     = datos.estacion || '';
-    fila[C.TIPO]         = it.tipo;
-    fila[C.LITROS]       = it.litros;
-    fila[C.PRECIO]       = it.precio_litro;
-    fila[C.TOTAL]        = it.total;
-    fila[C.KM_TOTAL]     = kmTotales;
-    fila[C.LEC_GLP]      = vacio(num(datos.lecturaGLP));
-    fila[C.LEC_GAS]      = vacio(num(datos.lecturaGasolina));
-    fila[C.CONS_COCHE]   = vacio(num(esGLP(it.tipo) ? datos.consumoCocheGLP : datos.consumoCocheGasolina));
-    fila[C.RECIBO]       = urlRecibo;
-    fila[C.LLENO]        = it.lleno;
-    fila[C.FECHA_TICKET] = fechaTicket || '';
-    return fila;
-  });
+  const filas = items.map(it => filaDeItem(it, {
+    id: idRecibo, ts: ahora, datos, fechaTicket, urlRecibo
+  }));
 
   const inicio = hoja.getLastRow() + 1;
   asegurarTamano(hoja, inicio + filas.length - 1, CABECERAS.length);
   hoja.getRange(inicio, 1, filas.length, CABECERAS.length).setValues(filas);
-  hoja.getRange(inicio, COL_LLENO, filas.length, 1).insertCheckboxes();
-  hoja.getRange(inicio, COL_FECHA_TICKET, filas.length, 1).setNumberFormat('dd/mm/yyyy');
+  darFormatoFilas(hoja, inicio, filas.length);
   SpreadsheetApp.flush();
 
   const resumen = recalcularTodo();
@@ -334,7 +339,132 @@ function guardarRepostaje(datos) {
   };
 }
 
-function vacio(v) { return v === null || v === undefined ? '' : v; }
+/** Construye una fila completa a partir de un combustible del ticket. */
+function filaDeItem(it, ctx) {
+  const fila = new Array(CABECERAS.length).fill('');
+  fila[C.ID]           = ctx.id;
+  fila[C.TS]           = ctx.ts;
+  fila[C.ESTACION]     = ctx.datos.estacion || '';
+  fila[C.TIPO]         = it.tipo;
+  fila[C.LITROS]       = it.litros;
+  fila[C.PRECIO]       = it.precio_litro;
+  fila[C.TOTAL]        = it.total;
+  fila[C.KM_TOTAL]     = num(ctx.datos.kmTotales);
+  fila[C.LEC_GLP]      = vacio(num(ctx.datos.lecturaGLP));
+  fila[C.LEC_GAS]      = vacio(num(ctx.datos.lecturaGasolina));
+  fila[C.CONS_COCHE]   = vacio(it.consumoCoche !== null && it.consumoCoche !== undefined
+    ? it.consumoCoche
+    : num(esGLP(it.tipo) ? ctx.datos.consumoCocheGLP : ctx.datos.consumoCocheGasolina));
+  fila[C.RECIBO]       = ctx.urlRecibo || '';
+  fila[C.LLENO]        = it.lleno;
+  fila[C.FECHA_TICKET] = ctx.fechaTicket || '';
+  fila[C.LAT]          = vacio(num(ctx.datos.lat));
+  fila[C.LON]          = vacio(num(ctx.datos.lon));
+  return fila;
+}
+
+function darFormatoFilas(hoja, inicio, cuantas) {
+  hoja.getRange(inicio, COL_LLENO, cuantas, 1).insertCheckboxes();
+  hoja.getRange(inicio, COL_FECHA_TICKET, cuantas, 1).setNumberFormat('dd/mm/yyyy');
+}
+
+// ============================================================
+//  EDITAR Y BORRAR (roadmap 2.1)
+//  La copia de seguridad se sincroniza sola en recalcularTodo(),
+//  así que aquí no hay que acordarse de respaldar nada.
+// ============================================================
+
+function editarRepostaje(datos) {
+  const hoja = getHoja();
+  const id = String(datos && datos.id || '').trim();
+  if (!id) return { ok: false, error: 'Falta el ID del repostaje.' };
+
+  const filasHoja = leerFilas();
+  const originales = filasHoja.filter(f => f[C.ID] === id);
+  if (!originales.length) return { ok: false, error: 'No encuentro el repostaje ' + id + '.' };
+
+  const items = (datos.items || []).map(normalizarItem).filter(i => i.litros > 0 || i.total > 0);
+  if (!items.length) return { ok: false, error: 'Un repostaje necesita al menos un combustible. Si quieres quitarlo entero, bórralo.' };
+
+  const kmTotales = num(datos.kmTotales);
+  if (kmTotales === null) return { ok: false, error: 'Faltan los KM totales.' };
+
+  const ref = originales[0];
+  const nuevas = items.map(it => filaDeItem(it, {
+    id,
+    ts: ref[C.TS] || new Date(),
+    datos,
+    fechaTicket: aFecha(datos.fechaTicket),
+    // Si no mandan recibo nuevo, se conserva el que ya tenía
+    urlRecibo: datos.recibo && datos.recibo.url ? datos.recibo.url : ref[C.RECIBO]
+  }));
+
+  reemplazarFilasTicket(hoja, id, nuevas);
+  SpreadsheetApp.flush();
+
+  const resumen = recalcularTodo();
+  return {
+    ok: true,
+    id,
+    avisos: (resumen.avisos || []).filter(a => a.id === id),
+    ordenAvisos: resumen.ordenAvisos || []
+  };
+}
+
+function borrarRepostaje(id) {
+  const hoja = getHoja();
+  id = String(id || '').trim();
+  if (!id) return { ok: false, error: 'Falta el ID del repostaje.' };
+
+  const ultima = hoja.getLastRow();
+  if (ultima < 2) return { ok: false, error: 'La hoja está vacía.' };
+
+  const ids = hoja.getRange(2, 1, ultima - 1, 1).getValues();
+  const aBorrar = [];
+  ids.forEach((f, i) => { if (f[0] === id) aBorrar.push(i + 2); });
+  if (!aBorrar.length) return { ok: false, error: 'No encuentro el repostaje ' + id + '.' };
+
+  // De abajo arriba, para que los índices no se muevan al ir borrando
+  aBorrar.reverse().forEach(fila => hoja.deleteRow(fila));
+  SpreadsheetApp.flush();
+
+  const resumen = recalcularTodo();
+  return {
+    ok: true,
+    id,
+    filasBorradas: aBorrar.length,
+    nota: 'Las filas siguen en la hoja «' + HOJA_COPIA + '», marcadas como borradas.',
+    ordenAvisos: resumen.ordenAvisos || []
+  };
+}
+
+/**
+ * Sustituye las filas de un ticket conservando su posición en la hoja, que es
+ * lo que define el orden cronológico del motor de cálculo. Ajusta el número de
+ * filas si el ticket pasa de uno a dos combustibles o al revés.
+ */
+function reemplazarFilasTicket(hoja, id, nuevas) {
+  const ultima = hoja.getLastRow();
+  const ids = hoja.getRange(2, 1, ultima - 1, 1).getValues();
+  const posiciones = [];
+  ids.forEach((f, i) => { if (f[0] === id) posiciones.push(i + 2); });
+  if (!posiciones.length) throw new Error('No encuentro el repostaje ' + id + '.');
+
+  const primera = posiciones[0];
+  const cuantasHay = posiciones.length;
+  const cuantasQuiero = nuevas.length;
+
+  if (cuantasQuiero < cuantasHay) {
+    // Sobran filas: se borran las últimas del ticket, de abajo arriba
+    posiciones.slice(cuantasQuiero).reverse().forEach(fila => hoja.deleteRow(fila));
+  } else if (cuantasQuiero > cuantasHay) {
+    hoja.insertRowsAfter(posiciones[cuantasHay - 1], cuantasQuiero - cuantasHay);
+  }
+
+  asegurarTamano(hoja, primera + cuantasQuiero - 1, CABECERAS.length);
+  hoja.getRange(primera, 1, cuantasQuiero, CABECERAS.length).setValues(nuevas);
+  darFormatoFilas(hoja, primera, cuantasQuiero);
+}
 
 // ============================================================
 //  MOTOR DE CÁLCULO
@@ -349,7 +479,8 @@ function tramoDeContador(lecturaActual, lecturaPrevia) {
 }
 
 /**
- * Recalcula tramos, acumulados por combustible, consumos y costes de toda la hoja.
+ * Recalcula tramos, acumulados por combustible, consumos y costes de toda la hoja,
+ * y sincroniza la copia de seguridad.
  *
  * Ventana de cálculo de un combustible: desde su último llenado hasta el siguiente.
  * Un repostaje parcial no la cierra; sus litros y euros se arrastran al llenado
@@ -359,13 +490,11 @@ function tramoDeContador(lecturaActual, lecturaPrevia) {
  * primera fila de ese combustible dentro del ticket, junto con los km de la
  * ventana. Así cada ventana aparece una sola vez y el dashboard puede ponderar
  * sin contar dos veces los mismos kilómetros.
- *
- * Devuelve un resumen con los avisos de coherencia detectados.
  */
 function recalcularTodo() {
   const hoja = getHoja();
   const ultima = hoja.getLastRow();
-  if (ultima < 2) return { avisos: [], ultimo: null };
+  if (ultima < 2) return { avisos: [], ordenAvisos: [], ultimo: null };
 
   const rango = hoja.getRange(2, 1, ultima - 1, CABECERAS.length);
   const filas = rango.getValues();
@@ -387,7 +516,7 @@ function recalcularTodo() {
   let vistoGLP = false, vistoGas = false;
   // Litros y euros de repostajes parciales pendientes de cerrar ventana
   let arrLitrosGLP = 0, arrEurosGLP = 0, arrLitrosGas = 0, arrEurosGas = 0;
-  const avisos = [];
+  const avisos = [], ordenAvisos = [];
 
   orden.forEach(id => {
     const idx = porId[id];
@@ -396,6 +525,16 @@ function recalcularTodo() {
     const kmTotal = num(ref[C.KM_TOTAL]);
     const lecGLP  = num(ref[C.LEC_GLP]);
     const lecGas  = num(ref[C.LEC_GAS]);
+
+    // Tras editar un repostaje antiguo el odómetro puede quedar desordenado, y el
+    // motor depende del orden de la hoja. Avisamos en vez de reordenar por sorpresa.
+    if (kmTotal !== null && previo && previo.kmTotal !== null && kmTotal < previo.kmTotal) {
+      ordenAvisos.push({
+        id,
+        texto: 'El repostaje ' + id + ' tiene menos KM (' + Math.round(kmTotal) +
+               ') que el anterior (' + Math.round(previo.kmTotal) + '). Las filas están desordenadas.'
+      });
+    }
 
     const kmTramo  = (kmTotal !== null && previo && previo.kmTotal !== null) ? kmTotal - previo.kmTotal : null;
     const tramoGLP = tramoDeContador(lecGLP, previo ? previo.lecGLP : null);
@@ -467,8 +606,11 @@ function recalcularTodo() {
   rango.setValues(filas);
   SpreadsheetApp.flush();
 
+  sincronizarCopia(filas);
+
   return {
     avisos,
+    ordenAvisos,
     ultimo: previo,
     pendientes: {
       kmGLPSinRepostar: accGLP,
@@ -480,6 +622,81 @@ function recalcularTodo() {
 }
 
 // ============================================================
+//  COPIA DE SEGURIDAD
+//  Todos los repostajes que han existido, vivos y borrados.
+// ============================================================
+
+function getHojaCopia() {
+  const libro = SpreadsheetApp.getActiveSpreadsheet();
+  let hoja = libro.getSheetByName(HOJA_COPIA);
+  if (!hoja) {
+    hoja = libro.insertSheet(HOJA_COPIA);
+    hoja.getRange(1, 1, 1, CABECERAS_COPIA.length).setValues([CABECERAS_COPIA])
+        .setFontWeight('bold').setBackground('#1E1E1E').setFontColor('#FFFFFF');
+    hoja.setFrozenRows(1);
+  }
+  if (CABECERAS_COPIA.length > hoja.getMaxColumns()) {
+    hoja.insertColumnsAfter(hoja.getMaxColumns(), CABECERAS_COPIA.length - hoja.getMaxColumns());
+  }
+  return hoja;
+}
+
+/** Clave de una fila dentro de la copia: un ticket puede traer dos combustibles. */
+function claveFila(f) { return String(f[C.ID]) + '|' + String(f[C.TIPO]); }
+
+/**
+ * Deja la copia al día: las filas vivas se refrescan con sus valores actuales y
+ * se marcan como no borradas; las que ya no están en la hoja principal se marcan
+ * como borradas con su fecha de baja, pero no se tocan sus datos.
+ */
+function sincronizarCopia(filasVivas) {
+  const hoja = getHojaCopia();
+  const ultima = hoja.getLastRow();
+  const previas = ultima >= 2 ? hoja.getRange(2, 1, ultima - 1, CABECERAS_COPIA.length).getValues() : [];
+
+  const indice = {};
+  previas.forEach((f, i) => { if (f[C.ID]) indice[claveFila(f)] = i; });
+
+  const vivas = {};
+  const nuevas = [];
+  const ahora = new Date();
+
+  filasVivas.forEach(f => {
+    if (!f[C.ID]) return;
+    const clave = claveFila(f);
+    vivas[clave] = true;
+    const copia = f.slice(0, CABECERAS.length);
+    copia[K.BORRADO] = false;
+    copia[K.BAJA] = '';
+    if (indice[clave] !== undefined) {
+      previas[indice[clave]] = copia;
+    } else {
+      nuevas.push(copia);
+    }
+  });
+
+  // Lo que estaba y ya no está: se marca la baja una sola vez
+  previas.forEach(f => {
+    if (!f[C.ID]) return;
+    if (vivas[claveFila(f)]) return;
+    if (f[K.BORRADO] === true) return;      // ya estaba dada de baja
+    f[K.BORRADO] = true;
+    f[K.BAJA] = ahora;
+  });
+
+  const todas = previas.concat(nuevas);
+  if (!todas.length) return;
+
+  if (todas.length + 1 > hoja.getMaxRows()) {
+    hoja.insertRowsAfter(hoja.getMaxRows(), todas.length + 1 - hoja.getMaxRows());
+  }
+  hoja.getRange(2, 1, todas.length, CABECERAS_COPIA.length).setValues(todas);
+  hoja.getRange(2, K.BORRADO + 1, todas.length, 1).insertCheckboxes();
+  hoja.getRange(2, COL_FECHA_TICKET, todas.length, 1).setNumberFormat('dd/mm/yyyy');
+  SpreadsheetApp.flush();
+}
+
+// ============================================================
 //  LECTURA DE LA HOJA
 // ============================================================
 
@@ -488,6 +705,7 @@ function getHoja() {
   let hoja = libro.getSheetByName(HOJA_DATOS);
   if (!hoja) {
     for (const s of libro.getSheets()) {
+      if (s.getName() === HOJA_COPIA) continue;
       if (s.getRange('A1').getValue() === 'ID') { hoja = s; break; }
     }
   }
@@ -548,6 +766,74 @@ function listaEstaciones() {
   return Object.keys(set).sort();
 }
 
+/** Coordenadas medias de cada estación, para proponerla por cercanía (roadmap 3.2). */
+function ubicacionesConocidas() {
+  const mapa = {};
+  leerFilas().forEach(f => {
+    const lat = num(f[C.LAT]), lon = num(f[C.LON]);
+    if (!f[C.ESTACION] || lat === null || lon === null) return;
+    const e = f[C.ESTACION];
+    if (!mapa[e]) mapa[e] = { estacion: e, lat: 0, lon: 0, n: 0 };
+    mapa[e].lat += lat; mapa[e].lon += lon; mapa[e].n++;
+  });
+  return Object.keys(mapa).map(e => ({
+    estacion: e,
+    lat: redondear(mapa[e].lat / mapa[e].n, 6),
+    lon: redondear(mapa[e].lon / mapa[e].n, 6)
+  }));
+}
+
+/**
+ * Kilómetros y litros pendientes desde el último llenado de cada depósito.
+ * Sirve para estimar la autonomía restante (roadmap 3.3) sin recalcular la hoja.
+ */
+function estadoDepositos() {
+  const filas = leerFilas();
+  const orden = [], porId = {};
+  filas.forEach((f, i) => {
+    const id = f[C.ID];
+    if (!id) return;
+    if (!porId[id]) { porId[id] = []; orden.push(id); }
+    porId[id].push(i);
+  });
+
+  let accGLP = 0, accGas = 0;
+  let completoGLP = true, completoGas = true;
+  let ultimoLlenadoGLP = null, ultimoLlenadoGas = null;
+  let previo = null;
+
+  orden.forEach(id => {
+    const idx = porId[id];
+    const ref = filas[idx[0]];
+    const tramoGLP = tramoDeContador(num(ref[C.LEC_GLP]), previo ? previo.lecGLP : null);
+    const tramoGas = tramoDeContador(num(ref[C.LEC_GAS]), previo ? previo.lecGas : null);
+
+    if (tramoGLP === null) completoGLP = false; else accGLP += tramoGLP;
+    if (tramoGas === null) completoGas = false; else accGas += tramoGas;
+
+    const idxGLP = idx.filter(i => esGLP(filas[i][C.TIPO]));
+    const idxGas = idx.filter(i => !esGLP(filas[i][C.TIPO]));
+    const llenaGLP = idxGLP.length > 0 && idxGLP.every(i => esLleno(filas[i][C.LLENO]));
+    const llenaGas = idxGas.length > 0 && idxGas.every(i => esLleno(filas[i][C.LLENO]));
+
+    const fecha = fechaEfectiva(ref);
+    if (llenaGLP) { accGLP = 0; completoGLP = true; ultimoLlenadoGLP = fecha; }
+    if (llenaGas) { accGas = 0; completoGas = true; ultimoLlenadoGas = fecha; }
+
+    previo = { lecGLP: num(ref[C.LEC_GLP]), lecGas: num(ref[C.LEC_GAS]) };
+  });
+
+  const fmt = d => d ? Utilities.formatDate(d, ZONA, 'yyyy-MM-dd') : '';
+  return {
+    capacidadGLP: DEPOSITO_GLP,
+    capacidadGasolina: DEPOSITO_GASOLINA,
+    kmDesdeLlenadoGLP: completoGLP ? redondear(accGLP, 1) : null,
+    kmDesdeLlenadoGasolina: completoGas ? redondear(accGas, 1) : null,
+    ultimoLlenadoGLP: fmt(ultimoLlenadoGLP),
+    ultimoLlenadoGasolina: fmt(ultimoLlenadoGas)
+  };
+}
+
 // ============================================================
 //  DASHBOARD
 // ============================================================
@@ -579,13 +865,17 @@ function getDashboardData() {
       consumoReal: num(f[C.CONS_REAL]),
       costeKmReal: num(f[C.COSTE_REAL]),
       costeKmCoche: num(f[C.COSTE_COCHE]),
-      recibo: f[C.RECIBO] || ''
+      recibo: f[C.RECIBO] || '',
+      lat: num(f[C.LAT]),
+      lon: num(f[C.LON])
     };
   });
 
   return {
     registros,
     estaciones: listaEstaciones(),
+    ubicaciones: ubicacionesConocidas(),
+    depositos: estadoDepositos(),
     version: VERSION,
     actualizado: Utilities.formatDate(new Date(), ZONA, 'dd/MM/yyyy HH:mm')
   };
@@ -654,8 +944,8 @@ function diagnosticoDrive() {
 }
 
 /**
- * Pone al día la cabecera y las columnas nuevas, y recalcula la hoja.
- * Es idempotente: puedes ejecutarlo tantas veces como quieras.
+ * Pone al día la cabecera y las columnas nuevas, crea la copia de seguridad y
+ * recalcula la hoja. Es idempotente: puedes ejecutarlo tantas veces como quieras.
  */
 function actualizarEsquema() {
   const hoja = getHoja();
@@ -669,17 +959,19 @@ function actualizarEsquema() {
 
     // Todo lo registrado antes de que existiera la columna era un depósito lleno
     const rLleno = hoja.getRange(2, COL_LLENO, n, 1);
-    const llenos = rLleno.getValues().map(v => [esLleno(v[0])]);
-    rLleno.setValues(llenos);
+    rLleno.setValues(rLleno.getValues().map(v => [esLleno(v[0])]));
     rLleno.insertCheckboxes();
 
     hoja.getRange(2, COL_FECHA_TICKET, n, 1).setNumberFormat('dd/mm/yyyy');
   }
 
+  getHojaCopia();
   const r = recalcularTodo();
+
   try {
     SpreadsheetApp.getUi().alert(
-      'Esquema actualizado a ' + CABECERAS.length + ' columnas y hoja recalculada.\n\n' +
+      'Esquema actualizado a ' + CABECERAS.length + ' columnas.\n' +
+      'Copia de seguridad al día en la hoja «' + HOJA_COPIA + '».\n\n' +
       (r.avisos.length ? 'Avisos:\n' + r.avisos.map(a => '· ' + a.texto).join('\n')
                        : 'Sin avisos de coherencia.')
     );
@@ -726,8 +1018,7 @@ function migrarEsquema() {
   hoja.setFrozenRows(1);
   if (nuevas.length) {
     hoja.getRange(2, 1, nuevas.length, CABECERAS.length).setValues(nuevas);
-    hoja.getRange(2, COL_LLENO, nuevas.length, 1).insertCheckboxes();
-    hoja.getRange(2, COL_FECHA_TICKET, nuevas.length, 1).setNumberFormat('dd/mm/yyyy');
+    darFormatoFilas(hoja, 2, nuevas.length);
   }
 
   recalcularTodo();

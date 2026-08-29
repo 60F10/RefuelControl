@@ -16,31 +16,94 @@
     --bg:#121212; --panel:#1E1E1E; --border:#2A2A2A;
     --text:#FFFFFF; --muted:#9A9A9A;
     --glp:#28f202; --g98:#00FFFF; --g95:#FF5C00; --oro:#FFD166; --rojo:#FF6B6B;
+    --barra:calc(58px + env(safe-area-inset-bottom));
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;}
   body{
-    margin:0;background:var(--bg);color:var(--text);
+    background:var(--bg);color:var(--text);
     font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-    padding:16px 16px calc(48px + env(safe-area-inset-bottom));
-    padding-top:calc(16px + env(safe-area-inset-top));
     -webkit-text-size-adjust:100%;
   }
-  h1{font-size:1.3rem;margin:6px 0 20px 4px;letter-spacing:.5px;}
-  h1 span{color:var(--glp);text-shadow:0 0 8px var(--glp);}
-  h2{font-size:1rem;margin:0 0 12px;color:var(--muted);font-weight:500;}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;}
-  .paso{font-size:.7rem;color:#6E6E6E;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
-  label{display:block;font-size:.78rem;color:var(--muted);margin:0 0 6px;}
-  .hint{font-size:.72rem;color:#6E6E6E;margin:-8px 0 12px;line-height:1.4;}
-  input,select{
+
+  /* ---------- Navegación por módulos ----------
+     Un carril horizontal con scroll-snap: el deslizamiento lo hace el navegador,
+     así que en iOS va tan suave como en una app nativa y sin librerías. */
+  #carril{
+    display:flex;height:100dvh;height:100vh;
+    overflow-x:auto;overflow-y:hidden;
+    scroll-snap-type:x mandatory;
+    scrollbar-width:none;-ms-overflow-style:none;
+  }
+  #carril::-webkit-scrollbar{display:none;}
+  .modulo{
+    flex:0 0 100%;width:100%;height:100%;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;
+    scroll-snap-align:start;scroll-snap-stop:always;
+    padding:calc(14px + env(safe-area-inset-top)) 14px calc(var(--barra) + 16px);
+  }
+  /* En una pantalla ancha el contenido no se estira: se queda en una columna
+     del ancho de un móvil, centrada, y las flechas caen en el hueco de los lados. */
+  .modulo > *{max-width:560px;margin-left:auto;margin-right:auto;}
+  /* Sin margin lateral propio: el margin-left/right auto de .modulo > * la centra */
+  .cabecera{display:flex;align-items:baseline;justify-content:space-between;
+    margin-top:2px;margin-bottom:14px;padding:0 2px;width:100%;}
+  .cabecera h1{font-size:1.15rem;margin:0;letter-spacing:.4px;}
+  .cabecera h1 span{color:var(--glp);text-shadow:0 0 8px var(--glp);}
+  .cabecera .pista{font-size:.7rem;color:#6E6E6E;}
+
+  /* Barra de pestañas: en móvil se toca, en escritorio se hace clic y responden
+     también las flechas del teclado. */
+  #barra{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;
+    display:flex;background:rgba(18,18,18,.94);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border-top:1px solid var(--border);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  #barra button{
+    flex:1;background:none;border:none;color:#6E6E6E;font-family:inherit;
+    padding:7px 2px 8px;cursor:pointer;display:flex;flex-direction:column;
+    align-items:center;gap:3px;font-size:.62rem;letter-spacing:.2px;
+    transition:color .18s;
+  }
+  #barra button svg{width:21px;height:21px;stroke:currentColor;fill:none;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  #barra button.on{color:var(--glp);}
+  #barra button.on svg{filter:drop-shadow(0 0 5px var(--glp));}
+  #barra .punto{position:absolute;top:4px;right:calc(50% - 16px);width:7px;height:7px;
+    border-radius:99px;background:var(--oro);display:none;}
+  #barra button.pendiente{position:relative;}
+  #barra button.pendiente .punto{display:block;}
+  .flecha{
+    position:fixed;top:50%;transform:translateY(-50%);z-index:15;
+    width:34px;height:56px;border-radius:10px;cursor:pointer;
+    background:rgba(30,30,30,.85);border:1px solid var(--border);color:var(--muted);
+    display:none;align-items:center;justify-content:center;font-size:1.1rem;
+  }
+  .flecha:hover{color:var(--text);border-color:var(--g98);}
+  #flechaIzq{left:8px;} #flechaDer{right:8px;}
+  /* Las flechas solo tienen sentido donde hay ratón. Con ellas visibles el módulo
+     gana margen lateral, para que nunca se pongan encima del contenido. */
+  @media (hover:hover) and (pointer:fine){
+    .flecha{display:flex;}
+    .modulo{padding-left:52px;padding-right:52px;}
+  }
+
+  /* ---------- Piezas ---------- */
+  h2{font-size:.95rem;margin:0 0 12px;color:var(--muted);font-weight:500;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:15px;margin-bottom:14px;}
+  .paso{font-size:.68rem;color:#6E6E6E;letter-spacing:1px;text-transform:uppercase;margin-bottom:9px;}
+  label{display:block;font-size:.76rem;color:var(--muted);margin:0 0 6px;}
+  .hint{font-size:.71rem;color:#6E6E6E;margin:-8px 0 12px;line-height:1.45;}
+  input,select,textarea{
     width:100%;background:#0E0E0E;border:1px solid var(--border);color:var(--text);
-    padding:12px;border-radius:10px;font-size:16px;margin-bottom:12px;font-family:inherit;
+    padding:11px;border-radius:10px;font-size:16px;margin-bottom:11px;font-family:inherit;
   }
   input:focus,select:focus{outline:none;border-color:var(--g98);}
   input.mal{border-color:var(--rojo);}
-  /* align-items:end alinea las cajas por abajo aunque una etiqueta ocupe dos líneas */
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;align-items:end;}
-  .btn{width:100%;border:none;border-radius:10px;padding:14px;font-size:1rem;
+  .btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:.98rem;
     font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px;}
   .btn-primary{background:linear-gradient(90deg,var(--glp),var(--g98));color:#000;
     box-shadow:0 0 14px rgba(40,242,2,.45),0 0 22px rgba(0,255,255,.3);}
@@ -48,169 +111,326 @@
     box-shadow:0 0 14px rgba(255,209,102,.4);}
   .btn-ghost{background:#0E0E0E;border:1px dashed var(--g98);color:var(--g98);font-weight:500;}
   .btn-ghost.ok{border-style:solid;color:var(--glp);border-color:var(--glp);}
+  .btn-rojo{background:#0E0E0E;border:1px solid var(--rojo);color:var(--rojo);font-weight:500;}
   .btn:disabled{opacity:.45;box-shadow:none;}
   .row-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   #preview{max-width:100%;border-radius:10px;margin-bottom:12px;display:none;}
-  #status{margin-top:6px;font-size:.85rem;color:var(--muted);min-height:1.2em;line-height:1.5;}
+  #status{margin-top:6px;font-size:.83rem;color:var(--muted);min-height:1.2em;line-height:1.5;}
   .aviso{color:var(--rojo);}
   .ok{color:var(--glp);}
+  .oro{color:var(--oro);}
   canvas{max-width:100%;}
-  /* Cada gráfico manda sobre su alto: así las barras no se estiran ni se salen */
-  .chart-box{position:relative;width:100%;height:240px;}
-  .chart-box.alto{height:270px;}
-  .refresh{float:right;background:none;border:1px solid var(--border);color:var(--muted);
-    padding:6px 10px;border-radius:8px;font-size:.75rem;cursor:pointer;margin-left:8px;}
-  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:.78rem;}
+  .chart-box{position:relative;width:100%;height:230px;}
+  .chart-box.alto{height:265px;}
+  .mini{background:none;border:1px solid var(--border);color:var(--muted);
+    padding:5px 9px;border-radius:8px;font-size:.72rem;cursor:pointer;margin-left:6px;font-family:inherit;}
+  .mini:hover{color:var(--text);border-color:var(--g98);}
+  .legend{display:flex;gap:13px;flex-wrap:wrap;margin-bottom:11px;font-size:.76rem;}
   .legend-item{display:flex;align-items:center;gap:6px;}
-  .legend-swatch{width:12px;height:12px;border-radius:3px;display:inline-block;}
+  .legend-swatch{width:11px;height:11px;border-radius:3px;display:inline-block;}
   .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
-  .kpi{background:#151515;border:1px solid var(--border);border-radius:12px;padding:12px;}
-  .kpi .k{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
-  .kpi .v{font-size:1.25rem;font-weight:700;margin-top:4px;}
-  .kpi .s{font-size:.72rem;color:#6E6E6E;margin-top:2px;line-height:1.45;}
+  .kpi{background:#151515;border:1px solid var(--border);border-radius:12px;padding:11px;}
+  .kpi .k{font-size:.67rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+  .kpi .v{font-size:1.2rem;font-weight:700;margin-top:4px;}
+  .kpi .s{font-size:.7rem;color:#6E6E6E;margin-top:3px;line-height:1.45;}
   .kpi.wide{grid-column:1 / -1;}
-  .toggle{display:flex;background:#0E0E0E;border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:14px;}
-  .toggle button{flex:1;background:none;border:none;color:var(--muted);padding:9px;border-radius:7px;
-    font-size:.82rem;cursor:pointer;font-family:inherit;}
+  .toggle{display:flex;background:#0E0E0E;border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:13px;}
+  .toggle button{flex:1;background:none;border:none;color:var(--muted);padding:8px;border-radius:7px;
+    font-size:.8rem;cursor:pointer;font-family:inherit;}
   .toggle button.on{background:var(--g98);color:#000;font-weight:600;}
   #revision{display:none;}
-  .item{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:#151515;}
+  .item{border:1px solid var(--border);border-radius:10px;padding:11px;margin-bottom:11px;background:#151515;}
+  .item.parcial{border-color:var(--oro);}
   .item .cab{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
-  .pill{font-size:.72rem;padding:3px 9px;border-radius:99px;font-weight:600;color:#000;}
+  .pill{font-size:.7rem;padding:3px 9px;border-radius:99px;font-weight:600;color:#000;}
   .del{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;
-    padding:4px 9px;font-size:.72rem;cursor:pointer;}
-  .barra{height:8px;border-radius:99px;background:#0E0E0E;overflow:hidden;display:flex;margin-top:8px;}
-  .barra i{display:block;height:100%;}
-  /* Casilla «depósito lleno»: área de toque grande, que se usa con el móvil en la mano */
-  .check{display:flex;align-items:center;gap:10px;padding:10px 0 2px;cursor:pointer;}
+    padding:4px 9px;font-size:.7rem;cursor:pointer;font-family:inherit;}
+  .barra-mix{height:8px;border-radius:99px;background:#0E0E0E;overflow:hidden;display:flex;margin-top:8px;}
+  .barra-mix i{display:block;height:100%;}
+  .check{display:flex;align-items:center;gap:10px;padding:9px 0 2px;cursor:pointer;}
   .check input{width:22px;height:22px;margin:0;accent-color:var(--glp);flex:0 0 auto;}
-  .check span{font-size:.85rem;color:var(--text);}
-  .check small{display:block;font-size:.72rem;color:#6E6E6E;margin-top:2px;line-height:1.35;}
-  .parcial{border-color:var(--oro);}
+  .check span{font-size:.83rem;color:var(--text);}
+  .check small{display:block;font-size:.71rem;color:#6E6E6E;margin-top:2px;line-height:1.35;}
+
+  /* Depósitos */
+  .dep{margin-bottom:11px;}
+  .dep .fila{display:flex;justify-content:space-between;font-size:.76rem;margin-bottom:5px;}
+  .dep .fila b{font-weight:600;}
+  .tanque{height:9px;border-radius:99px;background:#0E0E0E;overflow:hidden;}
+  .tanque i{display:block;height:100%;border-radius:99px;transition:width .4s;}
+
+  /* Historial */
+  .rep{background:#151515;border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;}
+  .rep .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;}
+  .rep .fecha{font-size:.82rem;font-weight:600;}
+  .rep .est{font-size:.72rem;color:var(--muted);margin-top:2px;}
+  .rep .imp{font-size:1.05rem;font-weight:700;white-space:nowrap;}
+  .rep .comb{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px;}
+  .rep .tag{font-size:.7rem;padding:3px 8px;border-radius:99px;background:#0E0E0E;border:1px solid var(--border);}
+  .rep .tag b{font-weight:600;}
+  .rep .acciones{display:flex;gap:7px;}
+  .rep .acciones button,.rep .acciones a{
+    flex:1;text-align:center;text-decoration:none;background:#0E0E0E;border:1px solid var(--border);
+    color:var(--muted);border-radius:8px;padding:7px 4px;font-size:.73rem;cursor:pointer;font-family:inherit;}
+  .rep .acciones a:hover,.rep .acciones button:hover{color:var(--text);border-color:var(--g98);}
+  .rep .acciones .peligro:hover{color:var(--rojo);border-color:var(--rojo);}
+  .rep.abierto{border-color:var(--g98);}
+  .editor{border-top:1px solid var(--border);margin-top:11px;padding-top:11px;}
+  .vacio{color:#6E6E6E;font-size:.82rem;text-align:center;padding:22px 10px;line-height:1.6;}
+
+  /* Ranking de estaciones */
+  .rank{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);}
+  .rank:last-child{border-bottom:none;}
+  .rank .pos{width:22px;font-size:.8rem;color:#6E6E6E;text-align:center;flex:0 0 auto;}
+  .rank .nom{flex:1;font-size:.8rem;line-height:1.3;}
+  .rank .nom small{display:block;color:#6E6E6E;font-size:.7rem;margin-top:2px;}
+  .rank .val{font-size:.85rem;font-weight:700;white-space:nowrap;}
+
+  .modal{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.75);
+    display:none;align-items:center;justify-content:center;padding:20px;}
+  .modal.on{display:flex;}
+  .modal .caja{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:18px;max-width:340px;width:100%;}
+  .modal h3{margin:0 0 10px;font-size:1rem;}
+  .modal p{font-size:.82rem;color:var(--muted);line-height:1.55;margin:0 0 14px;}
 </style>
 </head>
 <body>
 
-<h1>Control de <span>Repostajes</span></h1>
+<div id="carril">
 
-<!-- 1 · El ticket. Es lo primero que tienes en la mano al salir del surtidor. -->
-<div class="card">
-  <div class="paso">Paso 1 · El ticket</div>
-  <input type="file" id="inCam" accept="image/*" capture="environment" hidden>
-  <input type="file" id="inGal" accept="image/*" hidden>
-  <div class="row-btns">
-    <button class="btn btn-ghost" id="btnCam">Hacer foto</button>
-    <button class="btn btn-ghost" id="btnGal">Galería</button>
+<!-- ══════════════ 1 · REPOSTAR ══════════════ -->
+<section class="modulo" id="mod-repostar">
+  <div class="cabecera">
+    <h1>Nuevo <span>repostaje</span></h1>
+    <span class="pista" id="pistaConexion"></span>
   </div>
-  <img id="preview" alt="Ticket">
-  <button class="btn btn-primary" id="btnAnalizar">Analizar ticket</button>
-  <div id="status"></div>
-</div>
 
-<!-- 2 · Los números del ordenador de a bordo, mientras Gemini lee el ticket. -->
-<div class="card">
-  <div class="paso">Paso 2 · Datos del coche</div>
-  <label for="km">KM totales del coche *</label>
-  <input type="number" id="km" inputmode="decimal" placeholder="Ej. 4780">
-  <div class="hint" id="hintKm"></div>
-
-  <div class="grid2">
-    <div>
-      <label for="lecGlp">Parcial KM con GLP</label>
-      <input type="number" id="lecGlp" inputmode="decimal" placeholder="del coche">
-    </div>
-    <div>
-      <label for="lecGas">Parcial KM con gasolina</label>
-      <input type="number" id="lecGas" inputmode="decimal" placeholder="del coche">
-    </div>
+  <div class="card" id="cardDepositos" style="display:none">
+    <h2>Depósitos ahora mismo</h2>
+    <div id="depositos"></div>
   </div>
-  <div class="hint">Los dos parciales desde el último repostaje. Rellénalos siempre, aunque hoy solo repostes uno de los dos combustibles.</div>
 
-  <div class="grid2">
-    <div>
-      <label for="consGlp">Consumo GLP</label>
-      <input type="number" id="consGlp" inputmode="decimal" step="0.1" placeholder="del coche">
+  <div class="card">
+    <div class="paso">Paso 1 · El ticket</div>
+    <input type="file" id="inCam" accept="image/*" capture="environment" hidden>
+    <input type="file" id="inGal" accept="image/*" hidden>
+    <div class="row-btns">
+      <button class="btn btn-ghost" id="btnCam">Hacer foto</button>
+      <button class="btn btn-ghost" id="btnGal">Galería</button>
     </div>
-    <div>
-      <label for="consGas">Consumo gasolina</label>
-      <input type="number" id="consGas" inputmode="decimal" step="0.1" placeholder="del coche">
-    </div>
+    <img id="preview" alt="Ticket">
+    <button class="btn btn-primary" id="btnAnalizar">Analizar ticket</button>
+    <button class="btn btn-ghost" id="btnManual">Meterlo a mano</button>
+    <div id="status"></div>
   </div>
-  <div class="hint">En L/100km, tal y como los da el ordenador de a bordo.</div>
-</div>
 
-<!-- 3 · Revisión de lo que ha leído Gemini. -->
-<div class="card" id="revision">
-  <div class="paso">Paso 3 · Revisa antes de guardar</div>
-  <div class="grid2">
-    <div>
-      <label for="fechaTicket">Fecha del ticket</label>
-      <input type="date" id="fechaTicket">
+  <div class="card">
+    <div class="paso">Paso 2 · Datos del coche</div>
+    <label for="km">KM totales del coche *</label>
+    <input type="number" id="km" inputmode="decimal" placeholder="Ej. 4980">
+    <div class="hint" id="hintKm"></div>
+
+    <div class="grid2">
+      <div>
+        <label for="lecGlp">Parcial KM con GLP</label>
+        <input type="number" id="lecGlp" inputmode="decimal" placeholder="del coche">
+      </div>
+      <div>
+        <label for="lecGas">Parcial KM con gasolina</label>
+        <input type="number" id="lecGas" inputmode="decimal" placeholder="del coche">
+      </div>
     </div>
-    <div>
-      <label for="estacion">Estación</label>
-      <input type="text" id="estacion" list="listaEstaciones" placeholder="E.S. DISA Padre Anchieta">
-      <datalist id="listaEstaciones"></datalist>
+    <div class="hint">Los dos parciales desde el último repostaje. Rellénalos siempre, aunque hoy solo repostes uno de los dos combustibles.</div>
+
+    <div class="grid2">
+      <div>
+        <label for="consGlp">Consumo GLP</label>
+        <input type="number" id="consGlp" inputmode="decimal" step="0.1" placeholder="del coche">
+      </div>
+      <div>
+        <label for="consGas">Consumo gasolina</label>
+        <input type="number" id="consGas" inputmode="decimal" step="0.1" placeholder="del coche">
+      </div>
     </div>
+    <div class="hint">En L/100km, tal y como los da el ordenador de a bordo.</div>
   </div>
-  <div id="items"></div>
-  <div id="validacion"></div>
-  <button class="btn btn-primary" id="btnGuardar">Guardar repostaje</button>
-  <button class="btn btn-ghost" id="btnCancelar">Descartar</button>
-</div>
 
-<div class="card">
-  <h2>Resumen
-    <button class="refresh" id="btnRefresh">Actualizar ↻</button>
-    <button class="refresh" id="btnExport">CSV ↓</button>
-  </h2>
-  <div class="toggle">
-    <button id="tgReal" class="on">Cálculo real</button>
-    <button id="tgCoche">Datos del coche</button>
+  <div class="card" id="revision">
+    <div class="paso">Paso 3 · Revisa antes de guardar</div>
+    <div class="grid2">
+      <div>
+        <label for="fechaTicket">Fecha del ticket</label>
+        <input type="date" id="fechaTicket">
+      </div>
+      <div>
+        <label for="estacion">Estación</label>
+        <input type="text" id="estacion" list="listaEstaciones" placeholder="E.S. DISA Padre Anchieta">
+        <datalist id="listaEstaciones"></datalist>
+      </div>
+    </div>
+    <div class="hint" id="hintUbicacion"></div>
+    <div id="items"></div>
+    <button class="btn btn-ghost" id="btnAnadirItem">Añadir otro combustible</button>
+    <div id="validacion"></div>
+    <button class="btn btn-primary" id="btnGuardar">Guardar repostaje</button>
+    <button class="btn btn-ghost" id="btnCancelar">Descartar</button>
   </div>
-  <div class="kpis" id="kpis"></div>
-</div>
+</section>
 
-<div class="card">
-  <h2>Inversión por combustible (€)</h2>
-  <div class="legend" id="lgInversion"></div>
-  <div class="chart-box"><canvas id="chInversion"></canvas></div>
-</div>
+<!-- ══════════════ 2 · RESUMEN ══════════════ -->
+<section class="modulo" id="mod-resumen">
+  <div class="cabecera">
+    <h1>Resumen <span>general</span></h1>
+    <span class="pista" id="pistaActualizado"></span>
+  </div>
 
-<div class="card">
-  <h2>Kilómetros por combustible</h2>
-  <div class="legend" id="lgKm"></div>
-  <div class="chart-box"><canvas id="chKm"></canvas></div>
-</div>
+  <div class="card">
+    <div class="toggle">
+      <button class="tgReal on">Cálculo real</button>
+      <button class="tgCoche">Datos del coche</button>
+    </div>
+    <div class="kpis" id="kpis"></div>
+  </div>
 
-<div class="card">
-  <h2>Coste por KM (€/km) <span id="modoCoste" style="font-size:.75rem;color:#6E6E6E"></span></h2>
-  <div class="legend" id="lgCoste"></div>
-  <div class="chart-box"><canvas id="chCoste"></canvas></div>
-</div>
+  <div class="card">
+    <h2>Inversión por combustible (€)</h2>
+    <div class="legend" id="lgInversion"></div>
+    <div class="chart-box"><canvas id="chInversion"></canvas></div>
+  </div>
 
-<div class="card">
-  <h2>Consumo medio (L/100km) <span id="modoConsumo" style="font-size:.75rem;color:#6E6E6E"></span></h2>
-  <div class="legend" id="lgConsumo"></div>
-  <div class="chart-box"><canvas id="chConsumo"></canvas></div>
-</div>
+  <div class="card">
+    <h2>Kilómetros por combustible</h2>
+    <div class="legend" id="lgKm"></div>
+    <div class="chart-box"><canvas id="chKm"></canvas></div>
+  </div>
+</section>
 
-<div class="card">
-  <h2>Precio por litro (€)</h2>
-  <div class="legend" id="lgPrecio"></div>
-  <div class="chart-box"><canvas id="chPrecio"></canvas></div>
-</div>
+<!-- ══════════════ 3 · CONSUMOS ══════════════ -->
+<section class="modulo" id="mod-consumos">
+  <div class="cabecera">
+    <h1>Consumos y <span>costes</span></h1>
+    <span class="pista" id="pistaModo"></span>
+  </div>
 
-<div class="card">
-  <h2>Precio medio por estación (€/L)</h2>
-  <div class="legend" id="lgEstaciones"></div>
-  <div class="chart-box" id="boxEstaciones"><canvas id="chEstaciones"></canvas></div>
-</div>
+  <div class="card">
+    <div class="toggle">
+      <button class="tgReal on">Cálculo real</button>
+      <button class="tgCoche">Datos del coche</button>
+    </div>
+    <div class="kpis" id="kpisConsumo"></div>
+  </div>
 
-<div class="card">
-  <h2>Gasto mensual (€)</h2>
-  <div class="legend" id="lgMes"></div>
-  <div class="chart-box alto"><canvas id="chMeses"></canvas></div>
+  <div class="card">
+    <h2>Consumo medio (L/100km)</h2>
+    <div class="legend" id="lgConsumo"></div>
+    <div class="chart-box"><canvas id="chConsumo"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Coste por KM (€/km)</h2>
+    <div class="legend" id="lgCoste"></div>
+    <div class="chart-box"><canvas id="chCoste"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Gasto mensual (€)</h2>
+    <div class="legend" id="lgMes"></div>
+    <div class="chart-box alto"><canvas id="chMeses"></canvas></div>
+  </div>
+</section>
+
+<!-- ══════════════ 4 · ESTACIONES ══════════════ -->
+<section class="modulo" id="mod-estaciones">
+  <div class="cabecera">
+    <h1>Dónde <span>repostas</span></h1>
+    <span class="pista" id="pistaEstaciones"></span>
+  </div>
+
+  <div class="card" id="cardOportunidad" style="display:none">
+    <h2>Coste de oportunidad</h2>
+    <div class="kpis" id="kpisOportunidad"></div>
+  </div>
+
+  <div class="card">
+    <h2>Ranking real de estaciones</h2>
+    <div class="hint" style="margin-top:-4px">Cada repostaje se compara con el precio medio de ese combustible en esas fechas, así que una estación sale barata porque lo es y no por el mes en que fuiste.</div>
+    <div id="rankEstaciones"></div>
+  </div>
+
+  <div class="card">
+    <h2>Desviación media (€/L)</h2>
+    <div class="legend" id="lgDesviacion"></div>
+    <div class="chart-box" id="boxDesviacion"><canvas id="chDesviacion"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Precio por litro a lo largo del tiempo (€)</h2>
+    <div class="legend" id="lgPrecio"></div>
+    <div class="chart-box"><canvas id="chPrecio"></canvas></div>
+  </div>
+</section>
+
+<!-- ══════════════ 5 · HISTORIAL ══════════════ -->
+<section class="modulo" id="mod-historial">
+  <div class="cabecera">
+    <h1>Historial de <span>repostajes</span></h1>
+    <span class="pista" id="pistaHistorial"></span>
+  </div>
+
+  <div class="card">
+    <div class="row-btns">
+      <button class="btn btn-ghost" id="btnExport">Exportar CSV</button>
+      <button class="btn btn-ghost" id="btnRefresh">Actualizar ↻</button>
+    </div>
+    <div id="estadoHistorial" style="font-size:.8rem;color:var(--muted);min-height:1.2em"></div>
+  </div>
+
+  <div id="listaRepostajes"></div>
+</section>
+
+<!-- ══════════════ 6 · CURIOSIDADES ══════════════ -->
+<section class="modulo" id="mod-curiosidades">
+  <div class="cabecera">
+    <h1>Curi<span>osidades</span></h1>
+  </div>
+
+  <div class="card">
+    <h2>Récords</h2>
+    <div class="kpis" id="kpisRecords"></div>
+  </div>
+
+  <div class="card">
+    <h2>A este ritmo</h2>
+    <div class="kpis" id="kpisProyeccion"></div>
+  </div>
+
+  <div class="card">
+    <h2>Frente a la ficha técnica</h2>
+    <div class="kpis" id="kpisHomologado"></div>
+  </div>
+
+  <div class="card">
+    <h2>Kilómetros al mes</h2>
+    <div class="legend" id="lgEstacional"></div>
+    <div class="chart-box alto"><canvas id="chEstacional"></canvas></div>
+  </div>
+</section>
+
+</div><!-- /carril -->
+
+<button class="flecha" id="flechaIzq" aria-label="Módulo anterior">‹</button>
+<button class="flecha" id="flechaDer" aria-label="Módulo siguiente">›</button>
+
+<nav id="barra"></nav>
+
+<div class="modal" id="modal">
+  <div class="caja">
+    <h3 id="modalTitulo">¿Seguro?</h3>
+    <p id="modalTexto"></p>
+    <button class="btn btn-rojo" id="modalSi">Sí, borrar</button>
+    <button class="btn btn-ghost" id="modalNo">Cancelar</button>
+  </div>
 </div>
 
 <script>
@@ -220,6 +440,23 @@
 // ==========================================================
 const API = '/api/repostaje';
 
+// Datos del coche. Ajústalos aquí si cambian.
+const COCHE = {
+  // Capacidad útil de los depósitos, en litros. La de gasolina es la de ficha;
+  // la de GLP se ajustó a lo que de verdad entra.
+  depositoGLP: 45,
+  depositoGasolina: 50,
+  // Consumo homologado WLTP combinado del ECO-G 120, L/100km.
+  homologadoGLP: 7.4,
+  homologadoGasolina: 5.8
+};
+
+// kg de CO2 por litro quemado. Fuente: econologia.net
+const CO2 = { gasolina: 2.30, glp: 1.70 };
+
+// Ventana, en días, para comparar el precio de un repostaje con los de su época
+const VENTANA_PRECIO = 45;
+
 const COLORES = { "GLP": "#28f202", "Gasolina 98": "#00FFFF", "Gasolina 95": "#FF5C00" };
 const colorDe = t => COLORES[t] || "#8A8A8A";
 const esGLP = t => String(t).toUpperCase().indexOf('GLP') >= 0;
@@ -228,16 +465,98 @@ const eur = v => (v === null || v === undefined || isNaN(v)) ? '—' : v.toLocal
 const km  = v => (v === null || v === undefined || isNaN(v)) ? '—' : Math.round(v).toLocaleString('es-ES') + ' km';
 const dec = (v,d=2) => (v === null || v === undefined || isNaN(v)) ? '—' : v.toLocaleString('es-ES', {minimumFractionDigits:d, maximumFractionDigits:d});
 const ddmm = f => f ? f.split('-').reverse().slice(0,2).join('/') : '';
+const fechaLarga = f => {
+  if (!f) return '';
+  const [a,m,d] = f.split('-');
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  return d + ' ' + meses[+m - 1] + ' ' + a;
+};
+const dias = (a, b) => Math.abs((new Date(a) - new Date(b)) / 86400000);
 
 let MODO = 'real';
-let DATOS = { registros: [], estaciones: [] };
+let DATOS = { registros: [], estaciones: [], ubicaciones: [], depositos: null };
 let ANALISIS = null, RECIBO = null;
 let fotoB64 = null, fotoMime = null;
 let avisosAceptados = false;
+let editando = null;           // id del repostaje abierto en el historial
+let posicion = null;           // última posición del GPS
+let pendientes = 0;            // repostajes en la cola offline
 
 const $ = id => document.getElementById(id);
-const statusEl = $('status');
-const info = (html, clase) => { statusEl.innerHTML = clase ? '<span class="' + clase + '">' + html + '</span>' : html; };
+const statusEl = () => $('status');
+const info = (html, clase) => { statusEl().innerHTML = clase ? '<span class="' + clase + '">' + html + '</span>' : html; };
+const esc = s => String(s === null || s === undefined ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ==========================================================
+//  MÓDULOS Y NAVEGACIÓN
+//
+//  El carril es un scroll horizontal con scroll-snap, así que el
+//  deslizamiento del dedo lo resuelve el navegador. La barra de abajo
+//  y las flechas del teclado hacen lo mismo con scrollTo.
+// ==========================================================
+const MODULOS = [
+  { id: 'mod-repostar',     nombre: 'Repostar',  icono: 'M4 20V7l6-3 6 3v13M4 20h12M9 20v-5h2v5M17 9l3 2v7a1.5 1.5 0 0 1-3 0v-4h-1' },
+  { id: 'mod-resumen',      nombre: 'Resumen',   icono: 'M4 19h16M7 16V9m5 7V5m5 11v-4' },
+  { id: 'mod-consumos',     nombre: 'Consumos',  icono: 'M4 16l5-5 4 3 6-7M15 7h5v5' },
+  { id: 'mod-estaciones',   nombre: 'Estaciones',icono: 'M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z M12 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z' },
+  { id: 'mod-historial',    nombre: 'Historial', icono: 'M4 6h16M4 12h16M4 18h10M18.5 16.5v2.2l1.6 1' },
+  { id: 'mod-curiosidades', nombre: 'Curioso',   icono: 'M12 3l2.2 5.6L20 9.3l-4 4 1 5.7-5-2.9-5 2.9 1-5.7-4-4 5.8-.7z' }
+];
+
+let moduloActual = 0;
+const pintados = {};           // módulos cuyos gráficos ya se dibujaron
+
+function montarBarra() {
+  $('barra').innerHTML = MODULOS.map((m, i) => `
+    <button data-i="${i}" class="${i === 0 ? 'on' : ''}">
+      <span class="punto"></span>
+      <svg viewBox="0 0 24 24"><path d="${m.icono}"/></svg>
+      ${m.nombre}
+    </button>`).join('');
+  [...$('barra').children].forEach(b => { b.onclick = () => irA(+b.dataset.i); });
+}
+
+function irA(i) {
+  i = Math.max(0, Math.min(MODULOS.length - 1, i));
+  const carril = $('carril');
+  carril.scrollTo({ left: i * carril.clientWidth, behavior: 'smooth' });
+  marcarModulo(i);
+}
+
+function marcarModulo(i) {
+  if (i === moduloActual && pintados[MODULOS[i].id]) return;
+  moduloActual = i;
+  [...$('barra').children].forEach((b, j) => b.classList.toggle('on', j === i));
+  $('flechaIzq').style.visibility = i === 0 ? 'hidden' : 'visible';
+  $('flechaDer').style.visibility = i === MODULOS.length - 1 ? 'hidden' : 'visible';
+  pintarModulo(MODULOS[i].id);
+}
+
+// El scroll manda: al soltar el dedo se recalcula qué módulo quedó delante
+let tmrScroll = null;
+$('carril').addEventListener('scroll', () => {
+  clearTimeout(tmrScroll);
+  tmrScroll = setTimeout(() => {
+    const carril = $('carril');
+    const i = Math.round(carril.scrollLeft / carril.clientWidth);
+    if (i !== moduloActual) marcarModulo(i);
+  }, 90);
+}, { passive: true });
+
+document.addEventListener('keydown', e => {
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target.tagName || '').toUpperCase())) return;
+  if (e.key === 'ArrowRight') irA(moduloActual + 1);
+  if (e.key === 'ArrowLeft')  irA(moduloActual - 1);
+});
+$('flechaIzq').onclick = () => irA(moduloActual - 1);
+$('flechaDer').onclick = () => irA(moduloActual + 1);
+
+// Al girar el móvil cambia el ancho del carril y hay que recolocarse
+window.addEventListener('resize', () => {
+  const carril = $('carril');
+  carril.scrollLeft = moduloActual * carril.clientWidth;
+});
 
 // ==========================================================
 //  Glow neón
@@ -277,11 +596,153 @@ const etiquetasBarra = {
     chart.getDatasetMeta(0).data.forEach((el, i) => {
       const v = chart.data.datasets[0].data[i];
       if (v === null || v === undefined) return;
-      ctx.fillText((opts.formato || (x => x))(v), el.x + 6, el.y);
+      const texto = (opts.formato || (x => x))(v);
+      ctx.textAlign = v < 0 ? 'right' : 'left';
+      ctx.fillText(texto, el.x + (v < 0 ? -6 : 6), el.y);
     });
     ctx.restore();
   }
 };
+
+// ==========================================================
+//  COLA OFFLINE (IndexedDB)
+//  Sin cobertura el repostaje se guarda aquí, foto incluida, y
+//  se sube solo en cuanto vuelve la conexión.
+// ==========================================================
+const BD = { nombre: 'refuelcontrol', version: 1, almacen: 'pendientes' };
+
+function abrirBD() {
+  return new Promise((ok, mal) => {
+    if (!window.indexedDB) return mal(new Error('sin IndexedDB'));
+    const req = indexedDB.open(BD.nombre, BD.version);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(BD.almacen)) {
+        db.createObjectStore(BD.almacen, { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => ok(req.result);
+    req.onerror = () => mal(req.error);
+  });
+}
+
+async function conAlmacen(modo, fn) {
+  const db = await abrirBD();
+  return new Promise((ok, mal) => {
+    const tx = db.transaction(BD.almacen, modo);
+    const req = fn(tx.objectStore(BD.almacen));
+    tx.oncomplete = () => ok(req && req.result);
+    tx.onerror = () => mal(tx.error);
+  });
+}
+
+const encolar = p => conAlmacen('readwrite', s => s.add(Object.assign({ creado: Date.now() }, p)));
+const listarCola = () => conAlmacen('readonly', s => s.getAll());
+const sacarDeCola = id => conAlmacen('readwrite', s => s.delete(id));
+
+async function refrescarPendientes() {
+  try {
+    const cola = await listarCola();
+    pendientes = (cola || []).length;
+  } catch (err) {
+    pendientes = 0;
+  }
+  const btn = $('barra').children[0];
+  if (btn) btn.classList.toggle('pendiente', pendientes > 0);
+  $('pistaConexion').textContent = pendientes
+    ? pendientes + (pendientes === 1 ? ' sin subir' : ' sin subir')
+    : (navigator.onLine ? '' : 'sin conexión');
+  $('pistaConexion').className = 'pista ' + (pendientes ? 'oro' : '');
+}
+
+/** Sube todo lo que espera en la cola. Se llama al arrancar y al volver la red. */
+async function sincronizarCola(silencioso) {
+  if (!navigator.onLine) return;
+  let cola = [];
+  try { cola = (await listarCola()) || []; } catch (err) { return; }
+  if (!cola.length) return;
+
+  if (!silencioso) info('Subiendo ' + cola.length + ' repostaje(s) pendiente(s)...');
+  let subidos = 0;
+
+  for (const p of cola) {
+    try {
+      let recibo = p.recibo;
+      if (!recibo && p.fotoB64) {
+        const sub = await api({ action: 'subir', imagenBase64: p.fotoB64, mimeType: p.fotoMime || 'image/jpeg' });
+        if (sub.ok) recibo = { fileId: sub.fileId, url: sub.url };
+      }
+      const r = await api({ action: 'guardar', datos: Object.assign({}, p.datos, { recibo }) });
+      if (!r.ok) throw new Error(r.error);
+      await sacarDeCola(p.id);
+      subidos++;
+    } catch (err) {
+      break;      // si falla uno, lo dejamos para el próximo intento
+    }
+  }
+
+  await refrescarPendientes();
+  if (subidos) {
+    info('✅ ' + subidos + ' repostaje(s) pendiente(s) subido(s).', 'ok');
+    cargarDashboard();
+  }
+}
+
+window.addEventListener('online',  () => { refrescarPendientes(); sincronizarCola(); });
+window.addEventListener('offline', refrescarPendientes);
+
+// ==========================================================
+//  UBICACIÓN (roadmap 3.2)
+//  El permiso lo guarda el navegador. Con maximumAge reutilizamos
+//  la última posición y no se vuelve a molestar al usuario.
+// ==========================================================
+async function pedirUbicacion(forzar) {
+  if (!navigator.geolocation) return null;
+  try {
+    if (navigator.permissions && !forzar) {
+      const p = await navigator.permissions.query({ name: 'geolocation' });
+      if (p.state === 'denied') return null;
+    }
+  } catch (err) { /* Safari viejo no tiene permissions.query */ }
+
+  return new Promise(ok => {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        posicion = { lat: pos.coords.latitude, lon: pos.coords.longitude, precision: pos.coords.accuracy };
+        ok(posicion);
+      },
+      () => ok(null),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+    );
+  });
+}
+
+/** Distancia en metros entre dos coordenadas. */
+function distancia(a, b) {
+  const R = 6371000, rad = x => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const s = Math.sin(dLat/2)**2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function estacionMasCercana() {
+  if (!posicion) return null;
+  const conocidas = DATOS.ubicaciones || [];
+  let mejor = null;
+  conocidas.forEach(u => {
+    const d = distancia(posicion, u);
+    if (!mejor || d < mejor.metros) mejor = { estacion: u.estacion, metros: d };
+  });
+  return mejor && mejor.metros < 400 ? mejor : null;
+}
+
+function pintarPistaUbicacion() {
+  if (!posicion) { $('hintUbicacion').textContent = ''; return; }
+  const cerca = estacionMasCercana();
+  $('hintUbicacion').innerHTML = cerca
+    ? '📍 Estás a ' + Math.round(cerca.metros) + ' m de <b>' + esc(cerca.estacion) + '</b>, así que la he puesto por ti.'
+    : '📍 Ubicación guardada. No reconozco ninguna estación cerca, pero se apuntará para la próxima.';
+}
 
 // ==========================================================
 //  Foto: se reduce en el móvil antes de subirla.
@@ -351,13 +812,14 @@ async function api(payload) {
 // ==========================================================
 //  Analizar: subir la foto y luego pasarla por Gemini.
 //  Dos llamadas cortas, para no agotar el tiempo de la función.
-//  Los KM no hacen falta todavía: se validan al guardar.
 // ==========================================================
 $('btnAnalizar').onclick = async () => {
   if (!fotoB64) return info('Falta la foto del ticket.', 'aviso');
+  if (!navigator.onLine) return info('Sin conexión no se puede analizar. Usa «Meterlo a mano» y se subirá luego.', 'aviso');
 
   $('btnAnalizar').disabled = true;
   try {
+    pedirUbicacion();
     if (!RECIBO) {
       info('Subiendo la foto a Drive...');
       const sub = await api({ action: 'subir', imagenBase64: fotoB64, mimeType: fotoMime });
@@ -373,6 +835,7 @@ $('btnAnalizar').onclick = async () => {
     if (!r.ok) throw new Error(r.error || 'Error desconocido');
 
     ANALISIS = r;
+    if (r.ubicaciones) DATOS.ubicaciones = r.ubicaciones;
     info('Ticket analizado. Revisa los datos y guarda.', 'ok');
     pintarRevision(r);
   } catch (err) {
@@ -382,38 +845,30 @@ $('btnAnalizar').onclick = async () => {
   }
 };
 
+/** Registro a mano: sin ticket legible, sin cobertura, o porque perdiste el recibo. */
+$('btnManual').onclick = () => {
+  pedirUbicacion();
+  ANALISIS = {
+    estacion: '',
+    fechaTicket: new Date().toISOString().slice(0, 10),
+    items: [{ tipo: 'GLP', litros: 0, precio_litro: 0, total: 0, lleno: true }],
+    estacionesConocidas: DATOS.estaciones || []
+  };
+  info('Rellena los datos del ticket a mano.');
+  pintarRevision(ANALISIS);
+};
+
 function pintarRevision(r) {
-  $('estacion').value = r.estacion || '';
+  const cerca = estacionMasCercana();
+  $('estacion').value = r.estacion || (cerca ? cerca.estacion : '');
   $('fechaTicket').value = r.fechaTicket || '';
-  $('listaEstaciones').innerHTML = (r.estacionesConocidas || [])
-    .map(e => '<option value="' + e.replace(/"/g, '&quot;') + '">').join('');
+  $('listaEstaciones').innerHTML = (r.estacionesConocidas || DATOS.estaciones || [])
+    .map(e => '<option value="' + esc(e) + '">').join('');
 
-  $('items').innerHTML = (r.items || []).map((it, i) => `
-    <div class="item" data-i="${i}">
-      <div class="cab">
-        <span class="pill" style="background:${colorDe(it.tipo)}">${it.tipo}</span>
-        <button class="del" onclick="borrarItem(${i})">Quitar</button>
-      </div>
-      <label>Tipo</label>
-      <select class="f-tipo">
-        ${['GLP','Gasolina 95','Gasolina 98'].map(t =>
-          `<option value="${t}" ${t === it.tipo ? 'selected' : ''}>${t}</option>`).join('')}
-      </select>
-      <div class="grid2">
-        <div><label>Litros</label><input type="number" step="0.01" class="f-litros" value="${it.litros}"></div>
-        <div><label>€/litro</label><input type="number" step="0.001" class="f-precio" value="${it.precio_litro}"></div>
-      </div>
-      <label>Total (€)</label>
-      <input type="number" step="0.01" class="f-total" value="${it.total}">
-      <label class="check">
-        <input type="checkbox" class="f-lleno" ${it.lleno === false ? '' : 'checked'}>
-        <span>Depósito lleno
-          <small>Desmárcalo si echaste una cantidad suelta. Sus litros se sumarán al siguiente llenado en vez de dar un consumo falso.</small>
-        </span>
-      </label>
-    </div>`).join('');
-
+  $('items').innerHTML = (r.items || []).map(pintarItem).join('');
   marcarParciales();
+  pintarPistaUbicacion();
+
   $('validacion').innerHTML = '';
   avisosAceptados = false;
   $('btnGuardar').textContent = 'Guardar repostaje';
@@ -423,12 +878,48 @@ function pintarRevision(r) {
   $('revision').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function pintarItem(it, i) {
+  return `
+    <div class="item" data-i="${i}">
+      <div class="cab">
+        <span class="pill" style="background:${colorDe(it.tipo)}">${esc(it.tipo)}</span>
+        <button class="del" data-quitar="${i}">Quitar</button>
+      </div>
+      <label>Tipo</label>
+      <select class="f-tipo">
+        ${['GLP','Gasolina 95','Gasolina 98'].map(t =>
+          `<option value="${t}" ${t === it.tipo ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <div class="grid2">
+        <div><label>Litros</label><input type="number" step="0.01" class="f-litros" value="${it.litros || 0}"></div>
+        <div><label>€/litro</label><input type="number" step="0.001" class="f-precio" value="${it.precio_litro || 0}"></div>
+      </div>
+      <label>Total (€)</label>
+      <input type="number" step="0.01" class="f-total" value="${it.total || 0}">
+      <label class="check">
+        <input type="checkbox" class="f-lleno" ${it.lleno === false ? '' : 'checked'}>
+        <span>Depósito lleno
+          <small>Desmárcalo si echaste una cantidad suelta. Sus litros se sumarán al siguiente llenado en vez de dar un consumo falso.</small>
+        </span>
+      </label>
+    </div>`;
+}
+
 /** El borde ámbar recuerda de un vistazo qué depósito quedó a medias. */
 function marcarParciales() {
   document.querySelectorAll('#items .item').forEach(el => {
-    const lleno = el.querySelector('.f-lleno').checked;
-    el.classList.toggle('parcial', !lleno);
+    el.classList.toggle('parcial', !el.querySelector('.f-lleno').checked);
   });
+}
+
+function leerItems(raiz) {
+  return [...raiz.querySelectorAll('.item')].map(el => ({
+    tipo: el.querySelector('.f-tipo').value,
+    litros: parseFloat(el.querySelector('.f-litros').value) || 0,
+    precio_litro: parseFloat(el.querySelector('.f-precio').value) || 0,
+    total: parseFloat(el.querySelector('.f-total').value) || 0,
+    lleno: el.querySelector('.f-lleno').checked
+  }));
 }
 
 $('items').addEventListener('change', e => {
@@ -436,6 +927,27 @@ $('items').addEventListener('change', e => {
   reiniciarAvisos();
 });
 $('items').addEventListener('input', reiniciarAvisos);
+$('items').addEventListener('click', e => {
+  const i = e.target.dataset.quitar;
+  if (i === undefined) return;
+  ANALISIS.items = leerItems($('items'));
+  ANALISIS.items.splice(+i, 1);
+  if (!ANALISIS.items.length) {
+    $('revision').style.display = 'none';
+    return info('No queda ningún combustible. Vuelve a analizar el ticket o mételo a mano.', 'aviso');
+  }
+  $('items').innerHTML = ANALISIS.items.map(pintarItem).join('');
+  marcarParciales();
+});
+
+$('btnAnadirItem').onclick = () => {
+  const actuales = leerItems($('items'));
+  actuales.push({ tipo: 'Gasolina 98', litros: 0, precio_litro: 0, total: 0, lleno: true });
+  $('items').innerHTML = actuales.map((it, i) =>
+    pintarItem({ tipo: it.tipo, litros: it.litros, precio_litro: it.precio_litro, total: it.total, lleno: it.lleno }, i)).join('');
+  marcarParciales();
+};
+
 ['km','lecGlp','lecGas','fechaTicket'].forEach(id => $(id).addEventListener('input', reiniciarAvisos));
 
 /** Si cambias algo, los avisos que ya habías aceptado vuelven a contar. */
@@ -446,8 +958,6 @@ function reiniciarAvisos() {
   $('btnGuardar').classList.remove('alerta');
 }
 
-function borrarItem(i) { ANALISIS.items.splice(i, 1); pintarRevision(ANALISIS); }
-
 $('btnCancelar').onclick = () => {
   $('revision').style.display = 'none';
   ANALISIS = null;
@@ -455,7 +965,7 @@ $('btnCancelar').onclick = () => {
 };
 
 // ==========================================================
-//  Validación previa (2.3)
+//  Validación previa (roadmap 2.3)
 //  Los errores no dejan guardar. Los avisos piden un segundo
 //  toque, porque a veces el raro eres tú y no el dato.
 // ==========================================================
@@ -466,7 +976,7 @@ function maximoKm() {
 
 function validar(items) {
   const errores = [], avisos = [];
-  document.querySelectorAll('input.mal').forEach(el => el.classList.remove('mal'));
+  document.querySelectorAll('#mod-repostar input.mal').forEach(el => el.classList.remove('mal'));
 
   const kmT = parseFloat($('km').value);
   const kmMax = maximoKm();
@@ -500,6 +1010,12 @@ function validar(items) {
 
   items.forEach((it, i) => {
     const caja = document.querySelectorAll('#items .item')[i];
+    const capacidad = esGLP(it.tipo) ? COCHE.depositoGLP : COCHE.depositoGasolina;
+
+    if (!it.litros && !it.total) {
+      errores.push(it.tipo + ': hay que poner al menos los litros o el total.');
+      if (caja) caja.querySelector('.f-litros').classList.add('mal');
+    }
     if (it.total > 0 && (!it.litros || !it.precio_litro)) {
       avisos.push(it.tipo + ': litros o €/litro a cero con un total de ' + eur(it.total) +
                   '. Lo más probable es que Gemini leyera mal el ticket.');
@@ -514,6 +1030,15 @@ function validar(items) {
         if (caja) caja.querySelector('.f-total').classList.add('mal');
       }
     }
+    // Repostaje corto marcado como lleno: casi seguro que no llenó (roadmap 3.3)
+    if (it.lleno && it.litros && it.litros < capacidad * 0.5) {
+      avisos.push(it.tipo + ': solo ' + dec(it.litros) + ' L en un depósito de ' + capacidad +
+                  ' L. Si no lo llenaste, desmarca «Depósito lleno».');
+    }
+    if (it.litros > capacidad * 1.1) {
+      avisos.push(it.tipo + ': ' + dec(it.litros) + ' L no caben en un depósito de ' + capacidad + ' L.');
+      if (caja) caja.querySelector('.f-litros').classList.add('mal');
+    }
   });
 
   if (!$('fechaTicket').value) {
@@ -523,24 +1048,18 @@ function validar(items) {
   return { errores, avisos };
 }
 
-function pintarValidacion(v) {
-  const linea = (t, clase) => '<div class="' + clase + '" style="font-size:.8rem;margin-bottom:6px;line-height:1.45">' + t + '</div>';
-  $('validacion').innerHTML =
-    v.errores.map(t => linea('⛔ ' + t, 'aviso')).join('') +
-    v.avisos.map(t => linea('⚠️ ' + t, 'aviso')).join('');
+function pintarValidacion(v, destino) {
+  const linea = t => '<div class="aviso" style="font-size:.79rem;margin-bottom:6px;line-height:1.45">' + t + '</div>';
+  $(destino || 'validacion').innerHTML =
+    v.errores.map(t => linea('⛔ ' + t)).join('') +
+    v.avisos.map(t => linea('⚠️ ' + t)).join('');
 }
 
 // ==========================================================
 //  Guardar
 // ==========================================================
 $('btnGuardar').onclick = async () => {
-  const items = [...document.querySelectorAll('#items .item')].map(el => ({
-    tipo: el.querySelector('.f-tipo').value,
-    litros: parseFloat(el.querySelector('.f-litros').value) || 0,
-    precio_litro: parseFloat(el.querySelector('.f-precio').value) || 0,
-    total: parseFloat(el.querySelector('.f-total').value) || 0,
-    lleno: el.querySelector('.f-lleno').checked
-  }));
+  const items = leerItems($('items'));
   if (!items.length) return info('No queda ningún combustible que guardar.', 'aviso');
 
   const v = validar(items);
@@ -559,24 +1078,39 @@ $('btnGuardar').onclick = async () => {
     return;
   }
 
-  $('btnGuardar').disabled = true;
-  info('Guardando en el Sheet...');
+  const datos = {
+    estacion: $('estacion').value.trim(),
+    fechaTicket: $('fechaTicket').value,
+    kmTotales: $('km').value,
+    lecturaGLP: $('lecGlp').value,
+    lecturaGasolina: $('lecGas').value,
+    consumoCocheGLP: $('consGlp').value,
+    consumoCocheGasolina: $('consGas').value,
+    lat: posicion ? posicion.lat : '',
+    lon: posicion ? posicion.lon : '',
+    items
+  };
 
+  $('btnGuardar').disabled = true;
+
+  // Sin conexión no se pierde nada: va a la cola y sube solo
+  if (!navigator.onLine) {
+    try {
+      await encolar({ datos, fotoB64, fotoMime, recibo: RECIBO });
+      await refrescarPendientes();
+      limpiarFormulario();
+      info('📥 Guardado en el móvil. Se subirá solo cuando vuelva la cobertura.', 'oro');
+    } catch (err) {
+      info('❌ No se pudo guardar en el móvil: ' + err.message, 'aviso');
+    } finally {
+      $('btnGuardar').disabled = false;
+    }
+    return;
+  }
+
+  info('Guardando en el Sheet...');
   try {
-    const r = await api({
-      action: 'guardar',
-      datos: {
-        estacion: $('estacion').value.trim(),
-        fechaTicket: $('fechaTicket').value,
-        kmTotales: $('km').value,
-        lecturaGLP: $('lecGlp').value,
-        lecturaGasolina: $('lecGas').value,
-        consumoCocheGLP: $('consGlp').value,
-        consumoCocheGasolina: $('consGas').value,
-        recibo: RECIBO,
-        items
-      }
-    });
+    const r = await api({ action: 'guardar', datos: Object.assign({ recibo: RECIBO }, datos) });
     if (!r.ok) throw new Error(r.error || 'Error desconocido');
 
     let msg = '<span class="ok">✅ ' + r.idRecibo + ': ' +
@@ -584,24 +1118,36 @@ $('btnGuardar').onclick = async () => {
                        (i.lleno ? '' : ' · parcial')).join(' + ') + '</span>';
     if (r.avisoDrive) msg += '<br><span class="aviso">⚠️ ' + r.avisoDrive + '</span>';
     (r.avisos || []).forEach(a => { msg += '<br><span class="aviso">⚠️ ' + a.texto + '</span>'; });
-    statusEl.innerHTML = msg;
+    statusEl().innerHTML = msg;
 
-    ['km','lecGlp','lecGas','consGlp','consGas','estacion','fechaTicket'].forEach(id => $(id).value = '');
-    $('revision').style.display = 'none';
-    $('preview').style.display = 'none';
-    $('validacion').innerHTML = '';
-    $('btnCam').classList.remove('ok');
-    $('btnGal').classList.remove('ok');
-    $('btnGuardar').textContent = 'Guardar repostaje';
-    $('btnGuardar').classList.remove('alerta');
-    fotoB64 = null; ANALISIS = null; RECIBO = null; avisosAceptados = false;
+    limpiarFormulario();
     cargarDashboard();
   } catch (err) {
-    info('❌ ' + err.message, 'aviso');
+    // Si el fallo fue de red, no perdemos el repostaje
+    try {
+      await encolar({ datos, fotoB64, fotoMime, recibo: RECIBO });
+      await refrescarPendientes();
+      limpiarFormulario();
+      info('📥 No hubo respuesta del servidor, así que lo he guardado en el móvil. Se subirá solo.', 'oro');
+    } catch (err2) {
+      info('❌ ' + err.message, 'aviso');
+    }
   } finally {
     $('btnGuardar').disabled = false;
   }
 };
+
+function limpiarFormulario() {
+  ['km','lecGlp','lecGas','consGlp','consGas','estacion','fechaTicket'].forEach(id => $(id).value = '');
+  $('revision').style.display = 'none';
+  $('preview').style.display = 'none';
+  $('validacion').innerHTML = '';
+  $('btnCam').classList.remove('ok');
+  $('btnGal').classList.remove('ok');
+  $('btnGuardar').textContent = 'Guardar repostaje';
+  $('btnGuardar').classList.remove('alerta');
+  fotoB64 = null; ANALISIS = null; RECIBO = null; avisosAceptados = false;
+}
 
 // ==========================================================
 //  Dashboard
@@ -612,7 +1158,8 @@ async function cargarDashboard() {
     const data = await leerJSON(res);
     if (!data.ok) return info('Dashboard: ' + (data.error || 'sin respuesta'), 'aviso');
     DATOS = data;
-    pintarTodo();
+    Object.keys(pintados).forEach(k => delete pintados[k]);
+    pintarModulo(MODULOS[moduloActual].id);
     pintarPistas();
   } catch (err) {
     info('No se pudo cargar el dashboard: ' + err.message, 'aviso');
@@ -620,57 +1167,49 @@ async function cargarDashboard() {
 }
 
 $('btnRefresh').onclick = cargarDashboard;
-$('tgReal').onclick  = () => { MODO = 'real';  $('tgReal').classList.add('on');  $('tgCoche').classList.remove('on'); pintarTodo(); };
-$('tgCoche').onclick = () => { MODO = 'coche'; $('tgCoche').classList.add('on'); $('tgReal').classList.remove('on');  pintarTodo(); };
 
-// ==========================================================
-//  Exportar a CSV (4.3)
-//  El backend devuelve el texto dentro del JSON; el navegador
-//  lo convierte en descarga. El BOM es para que Excel respete
-//  los acentos.
-// ==========================================================
-$('btnExport').onclick = async () => {
-  const btn = $('btnExport');
-  btn.disabled = true;
-  const original = btn.textContent;
-  btn.textContent = '...';
-  try {
-    const res = await fetch(API + '?action=export', { cache: 'no-store' });
-    const d = await leerJSON(res);
-    if (!d.ok) throw new Error(d.error || 'sin respuesta');
+document.querySelectorAll('.tgReal').forEach(b => b.onclick = () => cambiarModo('real'));
+document.querySelectorAll('.tgCoche').forEach(b => b.onclick = () => cambiarModo('coche'));
 
-    const blob = new Blob(['﻿' + d.csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = d.nombre;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-    info(d.filas + ' filas exportadas a ' + d.nombre + '.', 'ok');
-  } catch (err) {
-    info('No se pudo exportar: ' + err.message, 'aviso');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = original;
-  }
-};
+function cambiarModo(m) {
+  MODO = m;
+  document.querySelectorAll('.tgReal').forEach(b => b.classList.toggle('on', m === 'real'));
+  document.querySelectorAll('.tgCoche').forEach(b => b.classList.toggle('on', m === 'coche'));
+  $('pistaModo').textContent = m === 'real' ? 'cálculo real' : 'datos del coche';
+  delete pintados['mod-resumen'];
+  delete pintados['mod-consumos'];
+  pintarModulo(MODULOS[moduloActual].id);
+}
 
 function pintarPistas() {
   const ult = (DATOS.registros || []).slice(-1)[0];
-  if (!ult) return;
-  const kmMax = maximoKm();
-  $('hintKm').textContent = 'Último registro: ' + km(kmMax) + ' · ' + ddmm(ult.fecha);
+  if (ult) $('hintKm').textContent = 'Último registro: ' + km(maximoKm()) + ' · ' + ddmm(ult.fecha);
+  $('pistaActualizado').textContent = DATOS.actualizado || '';
+  $('pistaHistorial').textContent = (DATOS.registros || []).length + ' líneas';
+  pintarDepositos();
+}
+
+/** Pinta solo el módulo que se está viendo: arrancar con 12 gráficos es lento. */
+function pintarModulo(id) {
+  if (pintados[id]) return;
+  const a = agregados();
+  switch (id) {
+    case 'mod-repostar':     pintarDepositos(); break;
+    case 'mod-resumen':      pintarResumen(a); break;
+    case 'mod-consumos':     pintarConsumos(a); break;
+    case 'mod-estaciones':   pintarEstaciones(a); break;
+    case 'mod-historial':    pintarHistorial(a); break;
+    case 'mod-curiosidades': pintarCuriosidades(a); break;
+  }
+  pintados[id] = true;
 }
 
 // ==========================================================
-//  Agregados
+//  AGREGADOS
 //
-//  Las medias van ponderadas por kilómetros (0.1). Hacer la media
-//  aritmética de los €/km de cada repostaje daba el mismo peso a un
-//  tramo de 100 km que a uno de 500, y sesgaba el resultado hacia los
-//  tramos cortos.
+//  Las medias van ponderadas por kilómetros (roadmap 0.1). Hacer la
+//  media aritmética de los €/km de cada repostaje daba el mismo peso a
+//  un tramo de 100 km que a uno de 500.
 //
 //  · Modo real:  el peso es kmCalculo, los km de la ventana que ese
 //    repostaje cierra. El backend solo lo escribe en una fila por
@@ -692,8 +1231,6 @@ function mediaPonderada(pares) {
 function agregados() {
   const regs = DATOS.registros || [];
 
-  // Cuántas filas del mismo depósito trae cada ticket, para repartir el peso
-  // en modo coche sin contar el tramo más de una vez.
   const hermanas = {};
   regs.forEach(r => {
     const clave = r.id + '|' + (esGLP(r.tipo) ? 'glp' : 'gas');
@@ -711,7 +1248,7 @@ function agregados() {
 
   const tickets = {};
   regs.forEach(r => {
-    if (!tickets[r.id]) tickets[r.id] = { id: r.id, fecha: r.fecha, kmTramo: r.kmTramo, kmGLP: r.kmGLP, kmGas: r.kmGas };
+    if (!tickets[r.id]) tickets[r.id] = { id: r.id, fecha: r.fecha, kmTramo: r.kmTramo, kmGLP: r.kmGLP, kmGas: r.kmGas, kmTotales: r.kmTotales };
   });
   const listaTickets = Object.values(tickets);
   const suma = (arr, f) => arr.reduce((a, x) => a + (f(x) || 0), 0);
@@ -721,7 +1258,6 @@ function agregados() {
   const kmTot = suma(listaTickets, t => t.kmTramo);
   const kmMax = Math.max(0, ...regs.map(r => r.kmTotales || 0));
 
-  // Agregados por tipo de producto (GLP, Gasolina 95, Gasolina 98)
   const porTipo = {};
   regs.forEach(r => {
     const t = r.tipo;
@@ -745,7 +1281,7 @@ function agregados() {
     p.kmMedidos = k.km;
   });
 
-  // Agregados por depósito (GLP frente a toda la gasolina)
+  // Por depósito: GLP frente a toda la gasolina
   const paresGLP = { costes: [], consumos: [] }, paresGas = { costes: [], consumos: [] };
   regs.forEach(r => {
     const destino = esGLP(r.tipo) ? paresGLP : paresGas;
@@ -760,15 +1296,13 @@ function agregados() {
   const costeGLP = cGLP.valor, costeGas = cGas.valor;
   const kmGLPMedidos = cGLP.km, kmGasMedidos = cGas.km;
 
-  // Ahorro: la cifra medida sobre los km con coste conocido y, aparte,
-  // la proyección a todos los kilómetros recorridos con GLP.
   const diferencia = (costeGLP !== null && costeGas !== null) ? costeGas - costeGLP : null;
-  const ahorroMedido    = diferencia === null ? null : kmGLPMedidos * diferencia;
+  const ahorroMedido     = diferencia === null ? null : kmGLPMedidos * diferencia;
   const ahorroProyectado = diferencia === null ? null : kmGLP * diferencia;
 
-  // Punto de equilibrio (1.1): a qué precio el GLP deja de compensar
-  const ultimoPrecio = tipo => {
-    const lista = regs.filter(r => (esGLP(r.tipo) === (tipo === 'glp')) && r.precio);
+  // Punto de equilibrio (roadmap 1.1)
+  const ultimoPrecio = deposito => {
+    const lista = regs.filter(r => (esGLP(r.tipo) === (deposito === 'glp')) && r.precio);
     return lista.length ? lista[lista.length - 1] : null;
   };
   const refGas = ultimoPrecio('gas'), refGLP = ultimoPrecio('glp');
@@ -787,13 +1321,93 @@ function agregados() {
   return {
     regs, listaTickets, porTipo, kmGLP, kmGas, kmTot, kmMax,
     costeGLP, costeGas, kmGLPMedidos, kmGasMedidos,
+    consumoGLP: kGLP.valor, consumoGas: kGas.valor,
     ahorroMedido, ahorroProyectado, equilibrio,
-    gastoTotal: suma(regs, r => r.total)
+    gastoTotal: suma(regs, r => r.total),
+    litrosGLP: suma(regs.filter(r => esGLP(r.tipo)), r => r.litros),
+    litrosGas: suma(regs.filter(r => !esGLP(r.tipo)), r => r.litros)
   };
 }
 
 // ==========================================================
-//  Pintado
+//  DESVIACIÓN DE PRECIO Y COSTE DE OPORTUNIDAD (roadmap 1.2 y 1.3)
+//
+//  Comparar precios medios por estación mezclaba fechas: una gasolinera
+//  parecía cara solo porque repostaste allí en un pico. Aquí cada
+//  repostaje se compara con la media de ese MISMO producto en una
+//  ventana de días alrededor de su fecha.
+// ==========================================================
+function analisisEstaciones(regs) {
+  const conPrecio = regs.filter(r => r.precio && r.fecha);
+
+  // Referencia de cada repostaje: media del mismo producto en fechas cercanas
+  const conDesviacion = conPrecio.map(r => {
+    const vecinos = conPrecio.filter(o => o.tipo === r.tipo && dias(o.fecha, r.fecha) <= VENTANA_PRECIO);
+    if (vecinos.length < 2) return Object.assign({}, r, { referencia: null, desviacion: null });
+    const referencia = vecinos.reduce((s, o) => s + o.precio, 0) / vecinos.length;
+    return Object.assign({}, r, { referencia, desviacion: r.precio - referencia });
+  });
+
+  // Por estación y producto
+  const mapa = {};
+  conDesviacion.forEach(r => {
+    const clave = r.estacion + '||' + r.tipo;
+    if (!mapa[clave]) mapa[clave] = { estacion: r.estacion, tipo: r.tipo, precios: [], desviaciones: [], litros: 0, visitas: 0 };
+    const m = mapa[clave];
+    m.precios.push(r.precio);
+    m.litros += r.litros || 0;
+    m.visitas++;
+    if (r.desviacion !== null) m.desviaciones.push(r.desviacion);
+  });
+
+  const media = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const lista = Object.values(mapa).map(m => ({
+    estacion: m.estacion,
+    tipo: m.tipo,
+    precioMedio: media(m.precios),
+    desviacion: media(m.desviaciones),
+    litros: m.litros,
+    visitas: m.visitas
+  }));
+
+  // La mejor de cada producto, para el coste de oportunidad
+  const mejorPorTipo = {};
+  lista.forEach(x => {
+    if (x.desviacion === null) return;
+    if (!mejorPorTipo[x.tipo] || x.desviacion < mejorPorTipo[x.tipo].desviacion) mejorPorTipo[x.tipo] = x;
+  });
+
+  // Cuánto habrías ahorrado repostando siempre en la más barata de cada producto
+  let oportunidad = 0, litrosComparados = 0;
+  let comparables = 0;
+  conDesviacion.forEach(r => {
+    const mejor = mejorPorTipo[r.tipo];
+    if (!mejor || r.desviacion === null || !r.litros) return;
+    // Cuántas estaciones distintas tienen ese producto: sin al menos dos, no hay elección
+    const cuantas = new Set(lista.filter(x => x.tipo === r.tipo).map(x => x.estacion)).size;
+    if (cuantas < 2) return;
+    const precioEnLaMejor = r.referencia + mejor.desviacion;
+    oportunidad += r.litros * (r.precio - precioEnLaMejor);
+    litrosComparados += r.litros;
+    comparables++;
+  });
+
+  return {
+    lista: lista.sort((a, b) => {
+      if (a.desviacion === null) return 1;
+      if (b.desviacion === null) return -1;
+      return a.desviacion - b.desviacion;
+    }),
+    mejorPorTipo,
+    oportunidad: comparables ? oportunidad : null,
+    litrosComparados,
+    comparables,
+    conDesviacion
+  };
+}
+
+// ==========================================================
+//  Pintado — utilidades comunes
 // ==========================================================
 const charts = {};
 function pintar(id, cfg) {
@@ -802,43 +1416,117 @@ function pintar(id, cfg) {
 }
 function leyenda(el, items) {
   $(el).innerHTML = items.map(i =>
-    `<span class="legend-item"><span class="legend-swatch" style="background:${i.color};box-shadow:0 0 6px ${i.color}"></span>${i.label}</span>`).join('');
+    `<span class="legend-item"><span class="legend-swatch" style="background:${i.color};box-shadow:0 0 6px ${i.color}"></span>${esc(i.label)}</span>`).join('');
 }
+function tarjetas(destino, lista) {
+  $(destino).innerHTML = lista.map(t =>
+    `<div class="kpi${t.ancha ? ' wide' : ''}"><div class="k">${esc(t.k)}</div>` +
+    `<div class="v"${t.color ? ' style="color:' + t.color + '"' : ''}>${t.v}</div>` +
+    `<div class="s">${t.s || ''}</div>${t.extra || ''}</div>`).join('');
+}
+
 const ejes = {
   responsive: true,
-  maintainAspectRatio: false,          // manda el alto de .chart-box
+  maintainAspectRatio: false,
   plugins: { legend: { display: false } },
   scales: {
     x: { ticks: { color: '#9A9A9A', maxRotation: 0, autoSkip: true }, grid: { color: '#2A2A2A' } },
     y: { ticks: { color: '#9A9A9A' }, grid: { color: '#2A2A2A' }, grace: '12%' }
   }
 };
-
-// En las barras el eje de valores SIEMPRE arranca en cero: si no, las barras
-// nacen fuera del área del gráfico y tapan las etiquetas del otro eje.
 const ejeValorBarra = { beginAtZero: true, ticks: { color: '#9A9A9A' }, grid: { color: '#2A2A2A' } };
 const ejeCategoria  = { ticks: { color: '#9A9A9A', maxRotation: 0, autoSkip: false }, grid: { display: false } };
 const donut = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } };
 
-function pintarTodo() {
-  const a = agregados();
-  const etiqueta = MODO === 'real' ? '· cálculo real' : '· datos del coche';
-  $('modoCoste').textContent = etiqueta;
-  $('modoConsumo').textContent = etiqueta;
-  pintarKPIs(a);
-  pintarInversion(a);
-  pintarKm(a);
-  pintarSeriesTemporales(a);
-  pintarEstaciones(a);
-  pintarMeses(a);
+/**
+ * Series temporales (roadmap 0.4)
+ * El eje es la lista de tickets, no la de fechas: buscar por fecha y tipo hacía
+ * que dos repostajes del mismo combustible el mismo día se pisaran.
+ */
+function ordenarTickets(regs) {
+  const vistos = {}, lista = [];
+  regs.forEach((r, i) => {
+    if (vistos[r.id]) return;
+    vistos[r.id] = true;
+    lista.push({ id: r.id, fecha: r.fecha, orden: i });
+  });
+  return lista.sort((x, y) => (x.fecha === y.fecha ? x.orden - y.orden : (x.fecha < y.fecha ? -1 : 1)));
 }
 
-function pintarKPIs(a) {
+function ejeTickets(a) {
+  const tickets = ordenarTickets(a.regs);
+  const cuantosPorDia = {};
+  tickets.forEach(t => { cuantosPorDia[t.fecha] = (cuantosPorDia[t.fecha] || 0) + 1; });
+  const contador = {};
+  const etiquetas = tickets.map(t => {
+    if (cuantosPorDia[t.fecha] === 1) return ddmm(t.fecha);
+    contador[t.fecha] = (contador[t.fecha] || 0) + 1;
+    return ddmm(t.fecha) + ' (' + contador[t.fecha] + ')';
+  });
+  const indice = {};
+  a.regs.forEach(r => { indice[r.id + '|' + r.tipo] = r; });
+  return { tickets, etiquetas, indice };
+}
+
+function serieDe(a, eje, campo) {
+  return Object.keys(a.porTipo).map(t => ({
+    label: t,
+    data: eje.tickets.map(tk => {
+      const r = eje.indice[tk.id + '|' + t];
+      return r && r[campo] !== null && r[campo] !== undefined ? r[campo] : null;
+    }),
+    borderColor: colorDe(t), backgroundColor: colorDe(t),
+    borderWidth: 2, pointRadius: 3, tension: .3, spanGaps: true
+  }));
+}
+
+// ==========================================================
+//  MÓDULO · Depósitos (roadmap 3.3)
+// ==========================================================
+function pintarDepositos() {
+  const d = DATOS.depositos;
+  const a = agregados();
+  if (!d) { $('cardDepositos').style.display = 'none'; return; }
+
+  const filas = [
+    { nombre: 'GLP',      color: 'var(--glp)', capacidad: d.capacidadGLP,      recorridos: d.kmDesdeLlenadoGLP,      consumo: a.consumoGLP || COCHE.homologadoGLP,      medido: a.consumoGLP !== null },
+    { nombre: 'Gasolina', color: 'var(--g98)', capacidad: d.capacidadGasolina, recorridos: d.kmDesdeLlenadoGasolina, consumo: a.consumoGas || COCHE.homologadoGasolina, medido: a.consumoGas !== null }
+  ];
+
+  let algo = false;
+  $('depositos').innerHTML = filas.map(f => {
+    if (f.recorridos === null || !f.consumo) {
+      return `<div class="dep"><div class="fila"><span>${f.nombre}</span>
+        <span style="color:#6E6E6E">sin datos suficientes</span></div></div>`;
+    }
+    algo = true;
+    const gastados = f.recorridos * f.consumo / 100;
+    const quedan = Math.max(0, f.capacidad - gastados);
+    const pct = Math.max(0, Math.min(100, (quedan / f.capacidad) * 100));
+    const autonomia = quedan * 100 / f.consumo;
+    const color = pct < 20 ? 'var(--rojo)' : (pct < 40 ? 'var(--oro)' : f.color);
+    return `<div class="dep">
+      <div class="fila"><span>${f.nombre} · ${km(f.recorridos)} desde el llenado</span>
+        <b style="color:${color}">${dec(quedan, 1)} L</b></div>
+      <div class="tanque"><i style="width:${pct}%;background:${color};box-shadow:0 0 8px ${color}"></i></div>
+      <div class="fila" style="margin-top:5px;color:#6E6E6E;font-size:.71rem">
+        <span>~${km(autonomia)} de autonomía a ${dec(f.consumo)} L/100km${f.medido ? '' : ' (homologado)'}</span>
+        <span>${dec(pct, 0)}%</span></div>
+    </div>`;
+  }).join('');
+
+  $('cardDepositos').style.display = algo ? 'block' : 'none';
+}
+
+// ==========================================================
+//  MÓDULO · Resumen
+// ==========================================================
+function pintarResumen(a) {
   const pctGLP = (a.kmGLP + a.kmGas) ? (a.kmGLP / (a.kmGLP + a.kmGas)) * 100 : null;
   const ratio = (a.costeGLP && a.costeGas) ? a.costeGas / a.costeGLP : null;
   const gastoGas = Object.values(a.porTipo).filter(p => !esGLP(p.tipo)).reduce((x, p) => x + p.total, 0);
 
-  const tarjetas = [
+  const lista = [
     { k: 'Odómetro', v: km(a.kmMax), s: km(a.kmTot) + ' registrados' },
     { k: 'Gasto total', v: eur(a.gastoTotal), s: a.regs.length + ' líneas de repostaje' },
     { k: 'KM con GLP', v: km(a.kmGLP), s: pctGLP === null ? '' : dec(pctGLP, 0) + '% del total' },
@@ -849,72 +1537,52 @@ function pintarKPIs(a) {
       s: 'Gasto gasolina: ' + eur(gastoGas) + (a.kmGasMedidos ? ' · medido en ' + km(a.kmGasMedidos) : '') }
   ];
 
-  let html = tarjetas.map(t =>
-    `<div class="kpi"><div class="k">${t.k}</div><div class="v">${t.v}</div><div class="s">${t.s || ''}</div></div>`).join('');
-
   if (ratio) {
-    const barra = (a.kmGLP + a.kmGas)
-      ? `<div class="barra">
-           <i style="width:${(a.kmGLP/(a.kmGLP+a.kmGas))*100}%;background:var(--glp)"></i>
-           <i style="width:${(a.kmGas/(a.kmGLP+a.kmGas))*100}%;background:var(--g98)"></i>
-         </div>` : '';
     const glpGana = ratio >= 1;
     const veces = glpGana ? ratio : 1 / ratio;
     const pct = Math.abs(1 - (glpGana ? a.costeGLP / a.costeGas : a.costeGas / a.costeGLP)) * 100;
-    html += `<div class="kpi wide">
-      <div class="k">Rentabilidad</div>
-      <div class="v" style="color:${glpGana ? 'var(--glp)' : 'var(--g98)'}">
-        ${glpGana ? 'El GLP' : 'La gasolina'} sale ${dec(veces, 2)}× más barato por km</div>
-      <div class="s">${dec(pct, 0)}% menos de coste por kilómetro que ${glpGana ? 'la gasolina' : 'el GLP'}</div>
-      ${barra}
-    </div>`;
+    lista.push({
+      ancha: true, k: 'Rentabilidad',
+      color: glpGana ? 'var(--glp)' : 'var(--g98)',
+      v: (glpGana ? 'El GLP' : 'La gasolina') + ' sale ' + dec(veces, 2) + '× más barato por km',
+      s: dec(pct, 0) + '% menos de coste por kilómetro que ' + (glpGana ? 'la gasolina' : 'el GLP'),
+      extra: (a.kmGLP + a.kmGas) ? `<div class="barra-mix">
+          <i style="width:${(a.kmGLP/(a.kmGLP+a.kmGas))*100}%;background:var(--glp)"></i>
+          <i style="width:${(a.kmGas/(a.kmGLP+a.kmGas))*100}%;background:var(--g98)"></i></div>` : ''
+    });
   }
 
-  // Punto de equilibrio (1.1)
   if (a.equilibrio) {
     const e = a.equilibrio;
     const margen = e.precioActualGLP !== null ? e.precio - e.precioActualGLP : null;
     const compensa = margen === null || margen > 0;
-    html += `<div class="kpi wide">
-      <div class="k">Punto de equilibrio del GLP</div>
-      <div class="v" style="color:${compensa ? 'var(--glp)' : 'var(--rojo)'}">
-        Hasta ${dec(e.precio, 3)} €/L</div>
-      <div class="s">
-        Con la ${e.tipoGasolina.toLowerCase()} a ${dec(e.precioGasolina, 3)} €/L y consumos de
-        ${dec(e.consumoGLP)} frente a ${dec(e.consumoGas)} L/100km.
-        ${e.precioActualGLP === null ? '' :
-          (compensa
-            ? 'Pagas ' + dec(e.precioActualGLP, 3) + ' €/L, así que te sobran ' + dec(margen, 3) + ' € de margen.'
-            : 'Pagas ' + dec(e.precioActualGLP, 3) + ' €/L: a este precio ya no compensa.')}
-      </div>
-    </div>`;
+    lista.push({
+      ancha: true, k: 'Punto de equilibrio del GLP',
+      color: compensa ? 'var(--glp)' : 'var(--rojo)',
+      v: 'Hasta ' + dec(e.precio, 3) + ' €/L',
+      s: 'Con la ' + e.tipoGasolina.toLowerCase() + ' a ' + dec(e.precioGasolina, 3) + ' €/L y consumos de ' +
+         dec(e.consumoGLP) + ' frente a ' + dec(e.consumoGas) + ' L/100km. ' +
+         (e.precioActualGLP === null ? '' : (compensa
+           ? 'Pagas ' + dec(e.precioActualGLP, 3) + ' €/L, así que te sobran ' + dec(margen, 3) + ' € de margen.'
+           : 'Pagas ' + dec(e.precioActualGLP, 3) + ' €/L: a este precio ya no compensa.'))
+    });
   }
 
-  // Ahorro: la cifra medida y, debajo, la proyección al total de km con GLP
   if (a.ahorroMedido) {
     const positivo = a.ahorroMedido > 0;
     const proyecta = a.ahorroProyectado && Math.round(a.kmGLP) > Math.round(a.kmGLPMedidos);
-    html += `<div class="kpi wide">
-      <div class="k">${positivo ? 'Ahorro con GLP' : 'Sobrecoste del GLP'}</div>
-      <div class="v" style="color:${positivo ? 'var(--oro)' : 'var(--rojo)'}">${eur(Math.abs(a.ahorroMedido))}</div>
-      <div class="s">Sobre los ${km(a.kmGLPMedidos)} con consumo medido.
-        ${proyecta ? 'Al mismo ritmo, los ' + km(a.kmGLP) + ' recorridos con GLP serían ' +
-                     eur(Math.abs(a.ahorroProyectado)) + '.' : ''}</div>
-    </div>`;
+    lista.push({
+      ancha: true, k: positivo ? 'Ahorro con GLP' : 'Sobrecoste del GLP',
+      color: positivo ? 'var(--oro)' : 'var(--rojo)',
+      v: eur(Math.abs(a.ahorroMedido)),
+      s: 'Sobre los ' + km(a.kmGLPMedidos) + ' con consumo medido. ' +
+         (proyecta ? 'Al mismo ritmo, los ' + km(a.kmGLP) + ' recorridos con GLP serían ' +
+                     eur(Math.abs(a.ahorroProyectado)) + '.' : '')
+    });
   }
 
-  Object.values(a.porTipo).forEach(p => {
-    if (p.consumoMedio) {
-      html += `<div class="kpi"><div class="k">Consumo ${p.tipo}</div>
-        <div class="v" style="color:${colorDe(p.tipo)}">${dec(p.consumoMedio)} <span style="font-size:.7rem">L/100km</span></div>
-        <div class="s">${p.precioMedio ? dec(p.precioMedio, 3) + ' €/L de media' : ''}</div></div>`;
-    }
-  });
+  tarjetas('kpis', lista);
 
-  $('kpis').innerHTML = html;
-}
-
-function pintarInversion(a) {
   const tipos = Object.values(a.porTipo);
   leyenda('lgInversion', tipos.map(t => ({ color: colorDe(t.tipo), label: t.tipo + ' · ' + eur(t.total) })));
   pintar('chInversion', {
@@ -922,121 +1590,53 @@ function pintarInversion(a) {
     data: { labels: tipos.map(t => t.tipo), datasets: [{ data: tipos.map(t => t.total), backgroundColor: tipos.map(t => colorDe(t.tipo)), borderWidth: 0 }] },
     options: donut
   });
-}
 
-function pintarKm(a) {
-  const datos = [
+  const datosKm = [
     { label: 'GLP', valor: a.kmGLP, color: COLORES['GLP'] },
     { label: 'Gasolina', valor: a.kmGas, color: COLORES['Gasolina 98'] }
   ].filter(d => d.valor > 0);
-  leyenda('lgKm', datos.map(d => ({ color: d.color, label: d.label + ' · ' + km(d.valor) })));
+  leyenda('lgKm', datosKm.map(d => ({ color: d.color, label: d.label + ' · ' + km(d.valor) })));
   pintar('chKm', {
     type: 'doughnut',
-    data: { labels: datos.map(d => d.label), datasets: [{ data: datos.map(d => d.valor), backgroundColor: datos.map(d => d.color), borderWidth: 0 }] },
+    data: { labels: datosKm.map(d => d.label), datasets: [{ data: datosKm.map(d => d.valor), backgroundColor: datosKm.map(d => d.color), borderWidth: 0 }] },
     options: donut
   });
 }
 
-/**
- * Series temporales (0.4)
- *
- * El eje es la lista de tickets, no la de fechas. Buscar por fecha y tipo con
- * find() hacía que dos repostajes del mismo combustible el mismo día se pisaran:
- * solo se pintaba el primero. Un ticket es un punto, siempre.
- */
-function ordenarTickets(regs) {
-  const vistos = {}, lista = [];
-  regs.forEach((r, i) => {
-    if (vistos[r.id]) return;
-    vistos[r.id] = true;
-    lista.push({ id: r.id, fecha: r.fecha, orden: i });
-  });
-  // Por fecha y, a igualdad, por el orden en que están en la hoja
-  return lista.sort((x, y) => (x.fecha === y.fecha ? x.orden - y.orden : (x.fecha < y.fecha ? -1 : 1)));
-}
-
-function pintarSeriesTemporales(a) {
-  const tickets = ordenarTickets(a.regs);
-  const tipos = Object.keys(a.porTipo);
-
-  // Si un día tiene más de un ticket, la etiqueta lo dice: 27/08 (1), 27/08 (2)
-  const cuantosPorDia = {};
-  tickets.forEach(t => { cuantosPorDia[t.fecha] = (cuantosPorDia[t.fecha] || 0) + 1; });
-  const contador = {};
-  const etiquetas = tickets.map(t => {
-    if (cuantosPorDia[t.fecha] === 1) return ddmm(t.fecha);
-    contador[t.fecha] = (contador[t.fecha] || 0) + 1;
-    return ddmm(t.fecha) + ' (' + contador[t.fecha] + ')';
-  });
-
-  // Índice ticket+tipo -> registro, para no rebuscar en cada serie
-  const indice = {};
-  a.regs.forEach(r => { indice[r.id + '|' + r.tipo] = r; });
-
-  const serie = campo => tipos.map(t => ({
-    label: t,
-    data: tickets.map(tk => {
-      const r = indice[tk.id + '|' + t];
-      return r && r[campo] !== null && r[campo] !== undefined ? r[campo] : null;
-    }),
-    borderColor: colorDe(t), backgroundColor: colorDe(t),
-    borderWidth: 2, pointRadius: 3, tension: .3, spanGaps: true
-  }));
-
-  const lg = tipos.map(t => ({ color: colorDe(t), label: t }));
-  leyenda('lgCoste', lg); leyenda('lgConsumo', lg); leyenda('lgPrecio', lg);
-
-  pintar('chCoste',   { type: 'line', data: { labels: etiquetas, datasets: serie(MODO === 'real' ? 'costeKmReal' : 'costeKmCoche') }, options: ejes });
-  pintar('chConsumo', { type: 'line', data: { labels: etiquetas, datasets: serie(MODO === 'real' ? 'consumoReal' : 'consumoCoche') }, options: ejes });
-  pintar('chPrecio',  { type: 'line', data: { labels: etiquetas, datasets: serie('precio') }, options: ejes });
-}
-
-function pintarEstaciones(a) {
-  const mapa = {};
-  a.regs.forEach(r => {
-    if (!r.precio) return;
-    const clave = r.estacion + ' · ' + r.tipo;
-    if (!mapa[clave]) mapa[clave] = { estacion: r.estacion, tipo: r.tipo, precios: [] };
-    mapa[clave].precios.push(r.precio);
-  });
-  const lista = Object.values(mapa)
-    .map(x => ({ estacion: x.estacion, tipo: x.tipo, medio: x.precios.reduce((p, c) => p + c, 0) / x.precios.length }))
-    .sort((x, y) => x.medio - y.medio);
-
-  // El alto crece con el número de barras: con muchas estaciones la tarjeta
-  // se alarga en vez de aplastarlas.
-  $('boxEstaciones').style.height = Math.max(160, lista.length * 30 + 46) + 'px';
-
-  const tiposPresentes = [...new Set(lista.map(x => x.tipo))];
-  leyenda('lgEstaciones', tiposPresentes.map(t => ({ color: colorDe(t), label: t })));
-
-  pintar('chEstaciones', {
-    type: 'bar',
-    plugins: [etiquetasBarra],
-    data: {
-      labels: lista.map(x => x.estacion.replace(/^E\.?\s?S\.?\s*/i, '') + ' · ' + x.tipo.replace('Gasolina ', '')),
-      datasets: [{
-        data: lista.map(x => x.medio),
-        backgroundColor: lista.map(x => colorDe(x.tipo)),
-        borderWidth: 0, borderRadius: 4, maxBarThickness: 20
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-      layout: { padding: { right: 38 } },   // hueco para la cifra al final de la barra
-      plugins: {
-        legend: { display: false },
-        etiquetasBarra: { formato: v => dec(v, 3) }
-      },
-      scales: {
-        x: ejeValorBarra,
-        y: { ...ejeCategoria, ticks: { color: '#C8C8C8', font: { size: 10 }, autoSkip: false } }
-      }
+// ==========================================================
+//  MÓDULO · Consumos
+// ==========================================================
+function pintarConsumos(a) {
+  const lista = [];
+  Object.values(a.porTipo).forEach(p => {
+    if (!p.consumoMedio) return;
+    lista.push({
+      k: 'Consumo ' + p.tipo, color: colorDe(p.tipo),
+      v: dec(p.consumoMedio) + ' <span style="font-size:.7rem">L/100km</span>',
+      s: (p.precioMedio ? dec(p.precioMedio, 3) + ' €/L de media' : '') +
+         (p.kmMedidos ? ' · ' + km(p.kmMedidos) : '')
+    });
+    if (p.costeKm) {
+      lista.push({
+        k: '€/km ' + p.tipo, color: colorDe(p.tipo),
+        v: dec(p.costeKm, 4) + ' €',
+        s: dec(p.litros, 1) + ' L repostados · ' + eur(p.total)
+      });
     }
   });
-}
+  if (!lista.length) {
+    lista.push({ ancha: true, k: 'Sin consumos todavía', v: '—',
+      s: 'Hacen falta dos llenados del mismo combustible con los parciales puestos.' });
+  }
+  tarjetas('kpisConsumo', lista);
 
-function pintarMeses(a) {
+  const eje = ejeTickets(a);
+  const lg = Object.keys(a.porTipo).map(t => ({ color: colorDe(t), label: t }));
+  leyenda('lgConsumo', lg); leyenda('lgCoste', lg);
+
+  pintar('chConsumo', { type: 'line', data: { labels: eje.etiquetas, datasets: serieDe(a, eje, MODO === 'real' ? 'consumoReal' : 'consumoCoche') }, options: ejes });
+  pintar('chCoste',   { type: 'line', data: { labels: eje.etiquetas, datasets: serieDe(a, eje, MODO === 'real' ? 'costeKmReal' : 'costeKmCoche') }, options: ejes });
+
   const meses = [...new Set(a.regs.map(r => r.fecha.slice(0, 7)))].filter(Boolean).sort();
   const tipos = Object.keys(a.porTipo);
   leyenda('lgMes', tipos.map(t => ({ color: colorDe(t), label: t })));
@@ -1053,10 +1653,470 @@ function pintarMeses(a) {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
-      scales: {
-        x: { ...ejeCategoria, stacked: true },
-        y: { ...ejeValorBarra, stacked: true }
+      scales: { x: { ...ejeCategoria, stacked: true }, y: { ...ejeValorBarra, stacked: true } }
+    }
+  });
+}
+
+// ==========================================================
+//  MÓDULO · Estaciones (roadmap 1.2 y 1.3)
+// ==========================================================
+function pintarEstaciones(a) {
+  const e = analisisEstaciones(a.regs);
+  const cuantas = new Set(e.lista.map(x => x.estacion)).size;
+  $('pistaEstaciones').textContent = cuantas + (cuantas === 1 ? ' estación' : ' estaciones');
+
+  // Coste de oportunidad
+  if (e.oportunidad !== null) {
+    const positivo = e.oportunidad > 0;
+    tarjetas('kpisOportunidad', [{
+      ancha: true,
+      k: positivo ? 'Podrías haber ahorrado' : 'Has repostado mejor que la media',
+      color: positivo ? 'var(--oro)' : 'var(--glp)',
+      v: eur(Math.abs(e.oportunidad)),
+      s: 'Sobre ' + dec(e.litrosComparados, 0) + ' L en ' + e.comparables + ' repostajes, si siempre hubieras ' +
+         'ido a la estación que de verdad sale más barata para cada combustible.'
+    }]);
+    $('cardOportunidad').style.display = 'block';
+  } else {
+    $('cardOportunidad').style.display = 'none';
+  }
+
+  // Ranking por desviación real
+  const conDato = e.lista.filter(x => x.desviacion !== null);
+  if (!conDato.length) {
+    $('rankEstaciones').innerHTML = '<div class="vacio">Todavía no hay repostajes suficientes para comparar.<br>' +
+      'Hacen falta al menos dos del mismo combustible en fechas cercanas.</div>';
+  } else {
+    $('rankEstaciones').innerHTML = conDato.map((x, i) => {
+      // Media décima de céntimo arriba o abajo es ruido, no una estación cara
+      const enLaMedia = Math.abs(x.desviacion) < 0.0005;
+      const barata = x.desviacion < 0;
+      const color = enLaMedia ? 'var(--muted)' : (barata ? 'var(--glp)' : 'var(--rojo)');
+      const cifra = enLaMedia ? 'en la media' : (barata ? '' : '+') + dec(x.desviacion, 3);
+      return `<div class="rank">
+        <div class="pos">${i + 1}</div>
+        <div class="nom">${esc(x.estacion.replace(/^E\.?\s?S\.?\s*/i, ''))}
+          <small>${esc(x.tipo)} · ${x.visitas} ${x.visitas === 1 ? 'visita' : 'visitas'} · ${dec(x.precioMedio, 3)} €/L de media</small></div>
+        <div class="val" style="color:${color};${enLaMedia ? 'font-size:.72rem;font-weight:500' : ''}">${cifra}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Gráfico de desviación. El eje se hace simétrico alrededor del cero para que
+  // las barras negativas tengan sitio y no se coman las etiquetas del otro eje.
+  if (conDato.length) {
+    $('boxDesviacion').style.height = Math.max(140, conDato.length * 32 + 50) + 'px';
+    const tiposPresentes = [...new Set(conDato.map(x => x.tipo))];
+    leyenda('lgDesviacion', tiposPresentes.map(t => ({ color: colorDe(t), label: t })));
+
+    const tope = Math.max(0.005, ...conDato.map(x => Math.abs(x.desviacion))) * 1.45;
+    const corto = s => (s.length > 15 ? s.slice(0, 14) + '…' : s);
+
+    pintar('chDesviacion', {
+      type: 'bar',
+      plugins: [etiquetasBarra],
+      data: {
+        labels: conDato.map(x => corto(x.estacion.replace(/^E\.?\s?S\.?\s*/i, '')) + ' · ' + x.tipo.replace('Gasolina ', '')),
+        datasets: [{
+          data: conDato.map(x => x.desviacion),
+          backgroundColor: conDato.map(x => colorDe(x.tipo)),
+          borderWidth: 0, borderRadius: 4, maxBarThickness: 18
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+        layout: { padding: { right: 44, left: 10 } },
+        plugins: { legend: { display: false }, etiquetasBarra: { formato: v => (v > 0 ? '+' : '') + dec(v, 3) } },
+        scales: {
+          x: {
+            min: -tope, max: tope,
+            ticks: { color: '#9A9A9A', font: { size: 9 }, maxTicksLimit: 5 },
+            grid: { color: c => (c.tick && Math.abs(c.tick.value) < 1e-9 ? '#4A4A4A' : '#2A2A2A') }
+          },
+          y: { ...ejeCategoria, ticks: { color: '#C8C8C8', font: { size: 9 }, autoSkip: false } }
+        }
       }
+    });
+  } else {
+    leyenda('lgDesviacion', []);
+    $('boxDesviacion').style.height = '80px';
+  }
+
+  const eje = ejeTickets(a);
+  leyenda('lgPrecio', Object.keys(a.porTipo).map(t => ({ color: colorDe(t), label: t })));
+  pintar('chPrecio', { type: 'line', data: { labels: eje.etiquetas, datasets: serieDe(a, eje, 'precio') }, options: ejes });
+}
+
+// ==========================================================
+//  MÓDULO · Historial (roadmap 2.1 y 2.4)
+// ==========================================================
+function pintarHistorial(a) {
+  const tickets = ordenarTickets(a.regs).reverse();   // lo último, arriba
+  if (!tickets.length) {
+    $('listaRepostajes').innerHTML = '<div class="vacio">Todavía no hay repostajes.<br>Registra el primero desde el módulo de la izquierda.</div>';
+    return;
+  }
+
+  $('listaRepostajes').innerHTML = tickets.map(t => {
+    const filas = a.regs.filter(r => r.id === t.id);
+    const ref = filas[0];
+    const total = filas.reduce((s, r) => s + (r.total || 0), 0);
+    const recibo = filas.map(r => r.recibo).filter(Boolean)[0];
+
+    const tags = filas.map(r => `<span class="tag" style="border-color:${colorDe(r.tipo)}">
+      <b style="color:${colorDe(r.tipo)}">${esc(r.tipo)}</b> ${dec(r.litros, 2)} L · ${eur(r.total)}${r.lleno ? '' : ' · parcial'}</span>`).join('');
+
+    const consumos = filas.filter(r => r.consumoReal).map(r =>
+      `<span class="tag">${esc(r.tipo)}: ${dec(r.consumoReal)} L/100km</span>`).join('');
+
+    return `<div class="rep" id="rep-${esc(t.id)}">
+      <div class="top">
+        <div>
+          <div class="fecha">${fechaLarga(ref.fecha)}${ref.fechaDelTicket ? '' : ' <span style="color:#6E6E6E;font-weight:400">(fecha de registro)</span>'}</div>
+          <div class="est">${esc(ref.estacion)} · ${km(ref.kmTotales)}</div>
+        </div>
+        <div class="imp">${eur(total)}</div>
+      </div>
+      <div class="comb">${tags}${consumos}</div>
+      <div class="acciones">
+        ${recibo ? `<a href="${esc(recibo)}" target="_blank" rel="noopener">Ver ticket</a>`
+                 : `<button disabled style="opacity:.4">Sin ticket</button>`}
+        <button data-editar="${esc(t.id)}">Editar</button>
+        <button class="peligro" data-borrar="${esc(t.id)}">Borrar</button>
+      </div>
+      <div class="editor" id="editor-${esc(t.id)}" style="display:none"></div>
+    </div>`;
+  }).join('');
+}
+
+$('listaRepostajes').addEventListener('click', e => {
+  const idEditar = e.target.dataset.editar;
+  const idBorrar = e.target.dataset.borrar;
+  if (idEditar) abrirEditor(idEditar);
+  if (idBorrar) confirmarBorrado(idBorrar);
+});
+
+function abrirEditor(id) {
+  const caja = $('editor-' + id);
+  const tarjeta = $('rep-' + id);
+  if (!caja) return;
+
+  if (editando === id) {          // segundo toque: se cierra
+    caja.style.display = 'none';
+    tarjeta.classList.remove('abierto');
+    editando = null;
+    return;
+  }
+  if (editando) {
+    const previa = $('editor-' + editando);
+    if (previa) { previa.style.display = 'none'; $('rep-' + editando).classList.remove('abierto'); }
+  }
+  editando = id;
+
+  const filas = (DATOS.registros || []).filter(r => r.id === id);
+  const ref = filas[0];
+
+  caja.innerHTML = `
+    <div class="grid2">
+      <div><label>Fecha del ticket</label><input type="date" class="e-fecha" value="${esc(ref.fechaDelTicket ? ref.fecha : '')}"></div>
+      <div><label>Estación</label><input type="text" class="e-estacion" list="listaEstaciones" value="${esc(ref.estacion)}"></div>
+    </div>
+    <div class="grid2">
+      <div><label>KM totales</label><input type="number" class="e-km" value="${ref.kmTotales === null ? '' : ref.kmTotales}"></div>
+      <div><label>Parcial GLP</label><input type="number" class="e-lecGlp" value="${ref.lecturaGLP === null ? '' : ref.lecturaGLP}"></div>
+    </div>
+    <div class="grid2">
+      <div><label>Parcial gasolina</label><input type="number" class="e-lecGas" value="${ref.lecturaGas === null ? '' : ref.lecturaGas}"></div>
+      <div></div>
+    </div>
+    <div class="e-items">${filas.map((r, i) => `
+      <div class="item" data-i="${i}">
+        <div class="cab">
+          <span class="pill" style="background:${colorDe(r.tipo)}">${esc(r.tipo)}</span>
+        </div>
+        <label>Tipo</label>
+        <select class="f-tipo">
+          ${['GLP','Gasolina 95','Gasolina 98'].map(t =>
+            `<option value="${t}" ${t === r.tipo ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+        <div class="grid2">
+          <div><label>Litros</label><input type="number" step="0.01" class="f-litros" value="${r.litros === null ? '' : r.litros}"></div>
+          <div><label>€/litro</label><input type="number" step="0.001" class="f-precio" value="${r.precio === null ? '' : r.precio}"></div>
+        </div>
+        <div class="grid2">
+          <div><label>Total (€)</label><input type="number" step="0.01" class="f-total" value="${r.total === null ? '' : r.total}"></div>
+          <div><label>Consumo coche</label><input type="number" step="0.1" class="f-cons" value="${r.consumoCoche === null ? '' : r.consumoCoche}"></div>
+        </div>
+        <label class="check">
+          <input type="checkbox" class="f-lleno" ${r.lleno ? 'checked' : ''}>
+          <span>Depósito lleno</span>
+        </label>
+      </div>`).join('')}</div>
+    <div class="e-aviso"></div>
+    <button class="btn btn-primary e-guardar">Guardar cambios</button>`;
+
+  caja.style.display = 'block';
+  tarjeta.classList.add('abierto');
+  caja.querySelector('.e-guardar').onclick = () => guardarEdicion(id, caja);
+  caja.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function guardarEdicion(id, caja) {
+  const items = [...caja.querySelectorAll('.item')].map(el => ({
+    tipo: el.querySelector('.f-tipo').value,
+    litros: parseFloat(el.querySelector('.f-litros').value) || 0,
+    precio_litro: parseFloat(el.querySelector('.f-precio').value) || 0,
+    total: parseFloat(el.querySelector('.f-total').value) || 0,
+    consumoCoche: el.querySelector('.f-cons').value === '' ? null : parseFloat(el.querySelector('.f-cons').value),
+    lleno: el.querySelector('.f-lleno').checked
+  }));
+
+  const km = caja.querySelector('.e-km').value;
+  if (!km) {
+    caja.querySelector('.e-aviso').innerHTML = '<div class="aviso" style="font-size:.79rem;margin-bottom:8px">⛔ Faltan los KM totales.</div>';
+    return;
+  }
+
+  const btn = caja.querySelector('.e-guardar');
+  btn.disabled = true;
+  $('estadoHistorial').textContent = 'Guardando cambios...';
+
+  try {
+    const r = await api({
+      action: 'editar',
+      datos: {
+        id,
+        estacion: caja.querySelector('.e-estacion').value.trim(),
+        fechaTicket: caja.querySelector('.e-fecha').value,
+        kmTotales: km,
+        lecturaGLP: caja.querySelector('.e-lecGlp').value,
+        lecturaGasolina: caja.querySelector('.e-lecGas').value,
+        items
+      }
+    });
+    if (!r.ok) throw new Error(r.error || 'Error desconocido');
+
+    let msg = '✅ ' + id + ' actualizado.';
+    (r.avisos || []).concat(r.ordenAvisos || []).forEach(a => { msg += ' ⚠️ ' + a.texto; });
+    $('estadoHistorial').innerHTML = '<span class="ok">' + esc(msg) + '</span>';
+    editando = null;
+    await cargarDashboard();
+  } catch (err) {
+    $('estadoHistorial').innerHTML = '<span class="aviso">❌ ' + esc(err.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function confirmarBorrado(id) {
+  const filas = (DATOS.registros || []).filter(r => r.id === id);
+  const total = filas.reduce((s, r) => s + (r.total || 0), 0);
+  $('modalTitulo').textContent = '¿Borrar este repostaje?';
+  $('modalTexto').innerHTML = esc(fechaLarga(filas[0].fecha)) + ' · ' + esc(filas[0].estacion) + ' · ' + eur(total) +
+    '.<br><br>Se quitará de la hoja principal, pero seguirá en «Copia de seguridad» marcado como borrado, ' +
+    'así que se puede recuperar. Todos los consumos se recalculan después.';
+  $('modal').classList.add('on');
+  $('modalSi').onclick = () => { $('modal').classList.remove('on'); borrar(id); };
+}
+$('modalNo').onclick = () => $('modal').classList.remove('on');
+$('modal').onclick = e => { if (e.target === $('modal')) $('modal').classList.remove('on'); };
+
+async function borrar(id) {
+  $('estadoHistorial').textContent = 'Borrando ' + id + '...';
+  try {
+    const r = await api({ action: 'borrar', id });
+    if (!r.ok) throw new Error(r.error || 'Error desconocido');
+    let msg = '🗑️ ' + id + ' borrado (' + r.filasBorradas + ' ' + (r.filasBorradas === 1 ? 'fila' : 'filas') + '). ' + r.nota;
+    (r.ordenAvisos || []).forEach(a => { msg += ' ⚠️ ' + a.texto; });
+    $('estadoHistorial').innerHTML = '<span class="ok">' + esc(msg) + '</span>';
+    editando = null;
+    await cargarDashboard();
+  } catch (err) {
+    $('estadoHistorial').innerHTML = '<span class="aviso">❌ ' + esc(err.message) + '</span>';
+  }
+}
+
+// ==========================================================
+//  Exportar a CSV (roadmap 4.3)
+//  El backend devuelve el texto dentro del JSON; el navegador lo
+//  convierte en descarga. El BOM es para que Excel respete los acentos.
+// ==========================================================
+$('btnExport').onclick = async () => {
+  const btn = $('btnExport');
+  btn.disabled = true;
+  $('estadoHistorial').textContent = 'Generando el CSV...';
+  try {
+    const res = await fetch(API + '?action=export', { cache: 'no-store' });
+    const d = await leerJSON(res);
+    if (!d.ok) throw new Error(d.error || 'sin respuesta');
+
+    const blob = new Blob(['﻿' + d.csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = d.nombre;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    $('estadoHistorial').innerHTML = '<span class="ok">' + d.filas + ' filas exportadas a ' + esc(d.nombre) + '.</span>';
+  } catch (err) {
+    $('estadoHistorial').innerHTML = '<span class="aviso">No se pudo exportar: ' + esc(err.message) + '</span>';
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// ==========================================================
+//  MÓDULO · Curiosidades (roadmap nivel 5)
+// ==========================================================
+function pintarCuriosidades(a) {
+  const regs = a.regs;
+
+  // ---- Récords ----
+  const records = [];
+  const conTotal = regs.filter(r => r.total);
+  if (conTotal.length) {
+    const caro = conTotal.reduce((x, y) => (y.total > x.total ? y : x));
+    const barato = conTotal.reduce((x, y) => (y.total < x.total ? y : x));
+    records.push({ k: 'Repostaje más caro', v: eur(caro.total), color: 'var(--rojo)',
+      s: esc(caro.tipo) + ' · ' + dec(caro.litros, 2) + ' L · ' + ddmm(caro.fecha) });
+    records.push({ k: 'Repostaje más barato', v: eur(barato.total), color: 'var(--glp)',
+      s: esc(barato.tipo) + ' · ' + dec(barato.litros, 2) + ' L · ' + ddmm(barato.fecha) });
+  }
+
+  const conPrecio = regs.filter(r => r.precio);
+  if (conPrecio.length) {
+    const caro = conPrecio.reduce((x, y) => (y.precio > x.precio ? y : x));
+    const barato = conPrecio.reduce((x, y) => (y.precio < x.precio ? y : x));
+    records.push({ k: 'Litro más caro', v: dec(caro.precio, 3) + ' €', color: 'var(--rojo)',
+      s: esc(caro.tipo) + ' · ' + esc(caro.estacion.replace(/^E\.?\s?S\.?\s*/i, '')) + ' · ' + ddmm(caro.fecha) });
+    records.push({ k: 'Litro más barato', v: dec(barato.precio, 3) + ' €', color: 'var(--glp)',
+      s: esc(barato.tipo) + ' · ' + esc(barato.estacion.replace(/^E\.?\s?S\.?\s*/i, '')) + ' · ' + ddmm(barato.fecha) });
+  }
+
+  const conConsumo = regs.filter(r => r.consumoReal);
+  if (conConsumo.length) {
+    const mejor = conConsumo.reduce((x, y) => (y.consumoReal < x.consumoReal ? y : x));
+    const peor = conConsumo.reduce((x, y) => (y.consumoReal > x.consumoReal ? y : x));
+    records.push({ k: 'Mejor consumo', v: dec(mejor.consumoReal) + ' <span style="font-size:.7rem">L/100km</span>',
+      color: 'var(--glp)', s: esc(mejor.tipo) + ' · ' + ddmm(mejor.fecha) });
+    if (peor.id !== mejor.id || peor.tipo !== mejor.tipo) {
+      records.push({ k: 'Peor consumo', v: dec(peor.consumoReal) + ' <span style="font-size:.7rem">L/100km</span>',
+        color: 'var(--rojo)', s: esc(peor.tipo) + ' · ' + ddmm(peor.fecha) });
+    }
+  }
+
+  const conVentana = regs.filter(r => r.kmCalculo);
+  if (conVentana.length) {
+    const larga = conVentana.reduce((x, y) => (y.kmCalculo > x.kmCalculo ? y : x));
+    records.push({ ancha: true, k: 'Depósito que más ha cundido', v: km(larga.kmCalculo), color: 'var(--oro)',
+      s: esc(larga.tipo) + ' · ' + dec(larga.litros, 2) + ' L hasta el llenado del ' + ddmm(larga.fecha) });
+  }
+
+  if (!records.length) records.push({ ancha: true, k: 'Sin récords todavía', v: '—', s: 'Registra unos cuantos repostajes.' });
+  tarjetas('kpisRecords', records);
+
+  // ---- Proyección ----
+  const proyeccion = [];
+  const anio = new Date().getFullYear();
+  const delAnio = regs.filter(r => r.fecha && +r.fecha.slice(0, 4) === anio);
+  if (delAnio.length) {
+    const gasto = delAnio.reduce((s, r) => s + (r.total || 0), 0);
+    const inicio = new Date(anio, 0, 1);
+    const transcurridos = Math.max(1, Math.round((Date.now() - inicio) / 86400000));
+    const diasAnio = ((anio % 4 === 0 && anio % 100 !== 0) || anio % 400 === 0) ? 366 : 365;
+    proyeccion.push({ k: 'Gasto en ' + anio, v: eur(gasto), s: 'en ' + transcurridos + ' días' });
+    proyeccion.push({ k: 'Cierre estimado', v: eur(gasto / transcurridos * diasAnio), color: 'var(--oro)',
+      s: dec(gasto / transcurridos * 30.4, 0) + ' € al mes de media' });
+
+    const ticketsAnio = a.listaTickets.filter(t => t.fecha && +t.fecha.slice(0, 4) === anio);
+    const kmAnio = ticketsAnio.reduce((s, t) => s + (t.kmTramo || 0), 0);
+    if (kmAnio) {
+      proyeccion.push({ k: 'KM en ' + anio, v: km(kmAnio), s: dec(kmAnio / transcurridos, 0) + ' km al día' });
+      proyeccion.push({ k: 'KM al cierre', v: km(kmAnio / transcurridos * diasAnio), color: 'var(--g98)',
+        s: 'a este ritmo' });
+    }
+  } else {
+    proyeccion.push({ ancha: true, k: 'Sin datos de ' + anio, v: '—', s: 'Todavía no hay repostajes de este año.' });
+  }
+
+  // ---- CO2 evitado ----
+  // Los dos lados de la comparación tienen que salir de los MISMOS kilómetros.
+  // Multiplicar los litros de todo el histórico por los km de los tramos medidos
+  // mezclaba peras con manzanas y disparaba las emisiones del GLP.
+  if (a.kmGLP && (a.consumoGLP || COCHE.homologadoGLP)) {
+    const consGLP = a.consumoGLP || COCHE.homologadoGLP;
+    const consGas = a.consumoGas || COCHE.homologadoGasolina;
+    const estimado = (a.consumoGLP === null ? 'GLP' : '') + (a.consumoGas === null ? (a.consumoGLP === null ? ' y gasolina' : 'gasolina') : '');
+
+    const kgGLP = (a.kmGLP * consGLP / 100) * CO2.glp;
+    const kgGasolina = (a.kmGLP * consGas / 100) * CO2.gasolina;
+    const evitado = kgGasolina - kgGLP;
+
+    proyeccion.push({
+      ancha: true,
+      k: evitado > 0 ? 'CO₂ evitado usando GLP' : 'CO₂ de más con GLP',
+      color: evitado > 0 ? 'var(--glp)' : 'var(--rojo)',
+      v: dec(Math.abs(evitado), 1) + ' <span style="font-size:.7rem">kg</span>',
+      s: 'Los ' + km(a.kmGLP) + ' con GLP han soltado unos ' + dec(kgGLP, 1) + ' kg a ' + dec(consGLP) +
+         ' L/100km. Con gasolina, a ' + dec(consGas) + ', habrían sido ' + dec(kgGasolina, 1) + ' kg' +
+         (estimado ? ' (consumo homologado para ' + estimado + ')' : '') +
+         '. Factores: ' + dec(CO2.glp, 2) + ' y ' + dec(CO2.gasolina, 2) + ' kg/L.'
+    });
+  }
+  tarjetas('kpisProyeccion', proyeccion);
+
+  // ---- Frente al homologado ----
+  const homologado = [];
+  [['GLP', a.consumoGLP, COCHE.homologadoGLP, 'var(--glp)'],
+   ['Gasolina', a.consumoGas, COCHE.homologadoGasolina, 'var(--g98)']].forEach(([nombre, real, ficha, color]) => {
+    if (!real) {
+      homologado.push({ k: nombre, v: '—', s: 'Sin consumo medido todavía. Ficha: ' + dec(ficha) + ' L/100km.' });
+      return;
+    }
+    const pct = (real / ficha - 1) * 100;
+    homologado.push({
+      k: nombre, color: pct <= 0 ? 'var(--glp)' : (pct > 15 ? 'var(--rojo)' : color),
+      v: (pct > 0 ? '+' : '') + dec(pct, 1) + '%',
+      s: dec(real) + ' frente a ' + dec(ficha) + ' L/100km de ficha'
+    });
+  });
+  homologado.push({
+    ancha: true, k: 'Aviso', v: '<span style="font-size:.8rem;font-weight:500">Cifras WLTP orientativas</span>',
+    s: 'El homologado del ECO-G 120 está fijado en el archivo (' + dec(COCHE.homologadoGLP) + ' GLP y ' +
+       dec(COCHE.homologadoGasolina) + ' gasolina). Corrígelo con tu ficha técnica delante si no cuadra.'
+  });
+  tarjetas('kpisHomologado', homologado);
+
+  // ---- Estacionalidad ----
+  const porMes = {};
+  a.listaTickets.forEach(t => {
+    if (!t.fecha || !t.kmTramo) return;
+    const m = t.fecha.slice(0, 7);
+    porMes[m] = (porMes[m] || 0) + t.kmTramo;
+  });
+  const meses = Object.keys(porMes).sort();
+  const mediaMes = meses.length ? meses.reduce((s, m) => s + porMes[m], 0) / meses.length : 0;
+  leyenda('lgEstacional', [
+    { color: COLORES['GLP'], label: 'Por encima de la media' },
+    { color: '#4A4A4A', label: 'Por debajo' }
+  ]);
+  pintar('chEstacional', {
+    type: 'bar',
+    data: {
+      labels: meses.map(m => { const p = m.split('-'); return p[1] + '/' + p[0].slice(2); }),
+      datasets: [{
+        data: meses.map(m => porMes[m]),
+        backgroundColor: meses.map(m => porMes[m] >= mediaMes ? COLORES['GLP'] : '#4A4A4A'),
+        borderWidth: 0, borderRadius: 4, maxBarThickness: 46
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: ejeCategoria, y: ejeValorBarra }
     }
   });
 }
@@ -1064,7 +2124,11 @@ function pintarMeses(a) {
 // ==========================================================
 //  Arranque
 // ==========================================================
-cargarDashboard();
+montarBarra();
+marcarModulo(0);
+refrescarPendientes();
+cargarDashboard().then(() => sincronizarCola(true));
+pedirUbicacion();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -2,7 +2,7 @@
 
 PWA para registrar los repostajes de un coche **bífuel GLP + gasolina** (Dacia Sandero Stepway ECO-G 120).
 
-Haces una foto del ticket, la IA extrae los datos, tú los revisas y se guardan en Google Sheets. El dashboard vive dentro de la propia app.
+Haces una foto del ticket, la IA extrae los datos, tú los revisas y se guardan en Google Sheets. El dashboard vive dentro de la propia app, repartido en seis módulos que se recorren deslizando el dedo.
 
 **Demo:** https://repostajesgofio.netlify.app/
 
@@ -41,6 +41,7 @@ Aquí introduces los dos parciales que da el ordenador de a bordo, y el cálculo
 | Capa | Tecnología |
 |---|---|
 | Front | HTML + CSS + JS sin framework, Chart.js por CDN, PWA con service worker |
+| Offline | IndexedDB para la cola de repostajes pendientes |
 | Hosting | Netlify |
 | Proxy | Netlify Function (Node) — guarda las claves |
 | Backend | Google Apps Script desplegado como aplicación web |
@@ -130,10 +131,14 @@ Una fila por combustible. Un ticket bífuel genera dos filas con el mismo ID.
 | S | KM de este combustible desde su último repostaje | calculado |
 | T | Depósito lleno | manual, marcado por defecto |
 | U | Fecha del ticket | Gemini, editable |
+| V | Latitud | GPS del móvil |
+| W | Longitud | GPS del móvil |
+
+Una segunda pestaña, **«Copia de seguridad»**, guarda todos los repostajes que han existido con dos columnas más: *Borrado* y *Fecha de baja*. Se sincroniza sola en cada recálculo, así que un borrado desde la app nunca pierde los datos.
 
 La hoja guarda valores, no fórmulas. `recalcularTodo()` regenera todas las columnas calculadas a partir de los datos de entrada.
 
-Si vienes de una versión anterior, el menú **⛽ RefuelControl → Actualizar esquema** crea las columnas que falten, marca como llenos los repostajes ya registrados y recalcula la hoja. Es idempotente.
+Si vienes de una versión anterior, el menú **⛽ RefuelControl → Actualizar esquema** crea las columnas que falten, marca como llenos los repostajes ya registrados, genera la copia de seguridad y recalcula la hoja. Es idempotente.
 
 ---
 
@@ -154,17 +159,52 @@ Las medias del dashboard van **ponderadas por kilómetros**: el €/km de un com
 
 ---
 
-## El dashboard
+## La app por dentro
 
-Indicadores de odómetro, gasto total, kilómetros y euros por combustible, coste por kilómetro de cada uno y cuántas veces sale más barato el GLP.
+Seis módulos en un carril horizontal con `scroll-snap`, así que el deslizamiento lo resuelve el navegador y en iOS va como una app nativa. Abajo, una barra de pestañas; en escritorio funcionan además las flechas del teclado y unos botones laterales, y el contenido se queda en una columna centrada en lugar de estirarse. Los gráficos de cada módulo se dibujan la primera vez que se entra.
+
+| Módulo | Qué lleva |
+|---|---|
+| Repostar | Estado de los depósitos, foto del ticket, datos del coche y revisión |
+| Resumen | KPI generales, rentabilidad, punto de equilibrio y ahorro |
+| Consumos | Consumo y €/km por combustible, evolución y gasto mensual |
+| Estaciones | Coste de oportunidad, ranking por desviación y precios |
+| Historial | Lista con el ticket, edición, borrado y exportación a CSV |
+| Curiosidades | Récords, proyección anual, CO₂ y comparación con la ficha |
+
+---
+
+## Qué mide el dashboard
 
 **Punto de equilibrio**: con los consumos reales de los dos combustibles, hasta qué precio por litro compensa el GLP frente al precio de gasolina que pagas ahora mismo.
 
-**Ahorro con GLP**: la cifra medida sobre los kilómetros con consumo calculado y, debajo, la proyección a todos los kilómetros recorridos con GLP.
+**Ahorro con GLP**: la cifra medida sobre los kilómetros con consumo calculado y, debajo, la proyección a todos los kilómetros recorridos con GLP. Lo medido y lo estimado nunca se mezclan.
 
-Gráficos de inversión y kilómetros por combustible, evolución del coste por kilómetro, del consumo y del precio por litro, precio medio por estación y gasto mensual. El eje temporal es la lista de tickets, así que dos repostajes del mismo día se ven como dos puntos.
+**Ranking real de estaciones**: comparar precios medios mezcla fechas, y una gasolinera parece cara solo porque fuiste en un pico. Aquí cada repostaje se compara con la media de *ese mismo producto* en una ventana de ±45 días alrededor de su fecha, y lo que ordena el ranking es esa desviación.
 
-El botón **CSV ↓** descarga el histórico entero, separado por punto y coma y con coma decimal, listo para abrir en Excel.
+**Coste de oportunidad**: lo que habrías ahorrado repostando siempre en la estación que de verdad sale más barata. Solo aparece con dos o más estaciones del mismo combustible.
+
+**Autonomía**: cuánto queda en cada depósito, estimado con el consumo medido y los kilómetros desde el último llenado.
+
+**Curiosidades**: récords, proyección del gasto y los kilómetros al cierre del año, CO₂ evitado frente a hacer esos mismos kilómetros con gasolina, y desviación respecto al consumo homologado.
+
+El eje temporal de las series es la lista de tickets, no la de fechas, así que dos repostajes del mismo día se ven como dos puntos.
+
+---
+
+## Registrar sin cobertura
+
+Muchas gasolineras cubiertas no tienen señal. Si no hay conexión, «Meterlo a mano» abre la pantalla de revisión en blanco y el repostaje se guarda en IndexedDB con la foto incluida; se sube solo en cuanto vuelve la red. Lo mismo si el servidor no responde estando en línea. Mientras quede algo pendiente, la pestaña Repostar lleva un punto ámbar.
+
+---
+
+## Editar, borrar y exportar
+
+Desde el módulo Historial se corrige cualquier campo de un repostaje y se borra con confirmación. La edición conserva la posición de la fila, que es lo que define el orden cronológico del motor de cálculo, y admite pasar un ticket de uno a dos combustibles o al revés.
+
+Borrar no destruye nada: la pestaña «Copia de seguridad» conserva la fila marcada como borrada, con su fecha de baja.
+
+El botón **Exportar CSV** descarga el histórico entero, separado por punto y coma y con coma decimal, listo para abrir en Excel.
 
 ---
 
