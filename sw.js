@@ -1,12 +1,37 @@
 // Sube este número si quieres forzar el borrado de la caché en los móviles.
 // Para un cambio normal en index.html no hace falta: la estrategia es "red primero".
-const CACHE = 'repostajes-v7';
+const CACHE = 'repostajes-v8';
 
-// Si mueves o renombras alguno de estos archivos, acuérdate de cambiarlo aquí.
+// Si mueves, renombras o añades alguno de estos archivos, acuérdate de cambiarlo
+// aquí: sin cobertura, lo que no esté en esta lista no existe. `test/rutas.test.js`
+// comprueba que todo lo que el front importa está en la lista.
 const ESTATICOS = [
   './',
   './index.html',
   './manifest.json',
+  './css/estilos.css',
+  './js/app.js',
+  './js/api.js',
+  './js/bloqueo.js',
+  './js/calculo.js',
+  './js/config.js',
+  './js/datos.js',
+  './js/dom.js',
+  './js/formato.js',
+  './js/navegacion.js',
+  './js/offline.js',
+  './js/refresco.js',
+  './js/servicio.js',
+  './js/ubicacion.js',
+  './js/validacion.js',
+  './js/ui/graficos.js',
+  './js/ui/repostar.js',
+  './js/ui/depositos.js',
+  './js/ui/resumen.js',
+  './js/ui/consumos.js',
+  './js/ui/estaciones.js',
+  './js/ui/historial.js',
+  './js/ui/curiosidades.js',
   './img/icon-192.png',
   './img/icon-512.png'
 ];

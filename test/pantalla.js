@@ -69,9 +69,12 @@ const DEPOSITOS = {
   ultimoLlenadoGLP: '2026-10-02', ultimoLlenadoGasolina: '2026-09-15'
 };
 
+// El tipo importa: un módulo ES servido como text/plain lo rechaza el navegador
+// sin dar más explicación que un error de MIME en la consola.
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png'
 };

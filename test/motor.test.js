@@ -3,9 +3,9 @@
  *
  *   node test/motor.test.js
  *
- * Carga Script.Repostaje.gs tal cual, con un libro simulado en memoria y unos
- * stubs mínimos de los servicios de Apps Script. Así se prueba el código que se
- * despliega, no una copia que se queda desfasada.
+ * Carga los .gs de apps-script/ tal cual, con un libro simulado en memoria y
+ * unos stubs mínimos de los servicios de Apps Script. Así se prueba el código
+ * que se despliega, no una copia que se queda desfasada.
  */
 
 const fs = require('fs');
@@ -13,7 +13,18 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-const RUTA_GS = path.join(__dirname, '..', 'Script.Repostaje.gs');
+const CARPETA_GS = path.join(__dirname, '..', 'apps-script');
+
+/**
+ * El backend son varios archivos .gs y Apps Script los mete a todos en el mismo
+ * ámbito global. Aquí se hace lo mismo: se leen en orden y se concatenan, así
+ * que se prueba exactamente el código que se despliega.
+ */
+function codigoBackend() {
+  const archivos = fs.readdirSync(CARPETA_GS).filter(f => f.endsWith('.gs')).sort();
+  assert.ok(archivos.length, 'no encontré ningún .gs en apps-script/');
+  return archivos.map(f => fs.readFileSync(path.join(CARPETA_GS, f), 'utf8')).join('\n');
+}
 
 // ============================================================
 //  Libro simulado
@@ -194,7 +205,7 @@ function crearScriptApp() {
 }
 
 function cargarBackend(libro, extras) {
-  const codigo = fs.readFileSync(RUTA_GS, 'utf8');
+  const codigo = codigoBackend();
   const propiedades = {};
   const contexto = {
     console: { log() {}, error() {} },
@@ -234,7 +245,7 @@ function cargarBackend(libro, extras) {
     }
   };
   vm.createContext(contexto);
-  vm.runInContext(codigo, contexto, { filename: 'Script.Repostaje.gs' });
+  vm.runInContext(codigo, contexto, { filename: 'apps-script' });
   return contexto;
 }
 

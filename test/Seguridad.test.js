@@ -137,39 +137,64 @@ console.log('\nCódigo de acceso y anticaché — RefuelControl\n');
   }
 
   // ---------- El front ----------
-  const html = fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8');
+  // Cada comprobación mira el archivo al que le toca. Con la app partida en
+  // módulos ya no hay que rastrear un index.html de dos mil líneas.
+  const leerJs = ruta => fs.readFileSync(path.join(RAIZ, ruta), 'utf8');
+  const api = leerJs('js/api.js');
+  const refresco = leerJs('js/refresco.js');
+  const historial = leerJs('js/ui/historial.js');
+  const datos = leerJs('js/datos.js');
 
   prueba('El front manda el código en cada llamada', () => {
-    const envios = html.match(/'X-Codigo': CODIGO/g) || [];
+    const envios = api.match(/'X-Codigo':/g) || [];
     assert.ok(envios.length >= 2, 'esperaba la cabecera en la lectura y en la escritura');
   });
 
   prueba('El front no lleva ningún código escrito', () => {
-    assert.ok(!/APP_PIN\s*=\s*['"][^'"]+['"]/.test(html), 'hay un código metido en el HTML');
-    assert.ok(/localStorage.getItem\(CLAVE_CODIGO\)/.test(html), 'el código debería salir del almacenamiento local');
+    assert.ok(!/APP_PIN\s*=\s*['"][^'"]+['"]/.test(api), 'hay un código metido en el front');
+    assert.ok(/localStorage\.getItem\(CLAVE_CODIGO\)/.test(api), 'el código debería salir del almacenamiento local');
   });
 
   prueba('Un 401 bloquea la app en vez de encolar el repostaje', () => {
-    assert.ok(/res\.status === 401/.test(html), 'el front no distingue el 401');
-    assert.ok(/err\.noAutorizado/.test(html), 'el 401 no se trata aparte del fallo de red');
+    assert.ok(/res\.status === 401/.test(api), 'el front no distingue el 401');
+    assert.ok(/err\.noAutorizado/.test(leerJs('js/ui/repostar.js')), 'el 401 no se trata aparte del fallo de red');
   });
 
   prueba('Las lecturas del dashboard llevan anticaché', () => {
-    assert.ok(/API \+ '\?' \+ consulta \+ '&_=' \+ Date\.now\(\)/.test(html), 'apiGet sin anticaché');
+    assert.ok(/API \+ '\?' \+ consulta \+ '&_=' \+ Date\.now\(\)/.test(api), 'apiGet sin anticaché');
   });
 
   prueba('El borrado quita el repostaje de la pantalla sin esperar', () => {
-    assert.ok(/function quitarTicket/.test(html), 'falta el borrado optimista');
-    assert.ok(/quitarTicket\(id\)/.test(html), 'borrar() no lo usa');
+    assert.ok(/export function quitarTicket/.test(datos), 'falta el borrado optimista');
+    assert.ok(/quitarTicket\(id\)/.test(historial), 'borrar() no lo usa');
   });
 
   prueba('Volver a la app refresca los datos', () => {
-    assert.ok(/visibilitychange/.test(html), 'no se refresca al volver a la app');
-    assert.ok(/pageshow/.test(html), 'no se refresca al volver del bfcache de iOS');
+    assert.ok(/visibilitychange/.test(refresco), 'no se refresca al volver a la app');
+    assert.ok(/pageshow/.test(refresco), 'no se refresca al volver del bfcache de iOS');
   });
 
   prueba('El gesto de tirar hacia abajo está enganchado', () => {
-    assert.ok(/touchmove/.test(html) && /PTR_UMBRAL/.test(html), 'falta el pull-to-refresh');
+    assert.ok(/touchmove/.test(refresco) && /PTR\.umbral/.test(refresco), 'falta el pull-to-refresh');
+  });
+
+  prueba('Solo api.js habla con la red, y solo con /api/repostaje', () => {
+    const modulos = [];
+    const recorrer = dir => fs.readdirSync(path.join(RAIZ, dir)).forEach(f => {
+      const rel = dir + '/' + f;
+      if (fs.statSync(path.join(RAIZ, rel)).isDirectory()) return recorrer(rel);
+      if (f.endsWith('.js')) modulos.push(rel);
+    });
+    recorrer('js');
+
+    modulos.forEach(m => {
+      const codigo = fs.readFileSync(path.join(RAIZ, m), 'utf8');
+      assert.ok(!/script\.google\.com|googleapis\.com/.test(codigo),
+        m + ' llama a Google directamente: el front solo debe hablar con /api/repostaje');
+      if (m === 'js/api.js') return;
+      assert.ok(!/\bfetch\s*\(/.test(codigo),
+        m + ' hace fetch por su cuenta; la red vive en js/api.js');
+    });
   });
 
   console.log('\n' + pasadas + ' pasadas, ' + fallidas + ' fallidas\n');

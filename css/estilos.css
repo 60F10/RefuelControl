@@ -1,0 +1,232 @@
+/* ==========================================================
+   RefuelControl · Estilos
+   Un único archivo: la app es de una pantalla y el CSS entero
+   cabe de sobra aquí. Si algún día crece, se parte en
+   base.css / modulos.css / tarjetas.css.
+   ========================================================== */
+
+:root{
+  --bg:#121212; --panel:#1E1E1E; --border:#2A2A2A;
+  --text:#FFFFFF; --muted:#9A9A9A;
+  --glp:#28f202; --g98:#00FFFF; --g95:#FF5C00; --oro:#FFD166; --rojo:#FF6B6B;
+  --barra:calc(58px + env(safe-area-inset-bottom));
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+
+/* ---------- Navegación por módulos ----------
+   Un carril horizontal con scroll-snap: el deslizamiento lo hace el navegador,
+   así que en iOS va tan suave como en una app nativa y sin librerías. */
+#carril{
+  display:flex;height:100dvh;height:100vh;
+  overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;
+  scrollbar-width:none;-ms-overflow-style:none;
+}
+#carril::-webkit-scrollbar{display:none;}
+.modulo{
+  flex:0 0 100%;width:100%;height:100%;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  scroll-snap-align:start;scroll-snap-stop:always;
+  padding:calc(14px + env(safe-area-inset-top)) 14px calc(var(--barra) + 16px);
+}
+/* En una pantalla ancha el contenido no se estira: se queda en una columna
+   del ancho de un móvil, centrada, y las flechas caen en el hueco de los lados. */
+.modulo > *{max-width:560px;margin-left:auto;margin-right:auto;}
+/* Sin margin lateral propio: el margin-left/right auto de .modulo > * la centra */
+.cabecera{display:flex;align-items:baseline;justify-content:space-between;
+  margin-top:2px;margin-bottom:14px;padding:0 2px;width:100%;}
+.cabecera h1{font-size:1.15rem;margin:0;letter-spacing:.4px;}
+.cabecera h1 span{color:var(--glp);text-shadow:0 0 8px var(--glp);}
+.cabecera .pista{font-size:.7rem;color:#6E6E6E;}
+
+/* Barra de pestañas: en móvil se toca, en escritorio se hace clic y responden
+   también las flechas del teclado. */
+#barra{
+  position:fixed;left:0;right:0;bottom:0;z-index:20;
+  display:flex;background:rgba(18,18,18,.94);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-top:1px solid var(--border);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+#barra button{
+  flex:1;background:none;border:none;color:#6E6E6E;font-family:inherit;
+  padding:7px 2px 8px;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;gap:3px;font-size:.62rem;letter-spacing:.2px;
+  transition:color .18s;
+}
+#barra button svg{width:21px;height:21px;stroke:currentColor;fill:none;
+  stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+#barra button.on{color:var(--glp);}
+#barra button.on svg{filter:drop-shadow(0 0 5px var(--glp));}
+#barra .punto{position:absolute;top:4px;right:calc(50% - 16px);width:7px;height:7px;
+  border-radius:99px;background:var(--oro);display:none;}
+#barra button.pendiente{position:relative;}
+#barra button.pendiente .punto{display:block;}
+.flecha{
+  position:fixed;top:50%;transform:translateY(-50%);z-index:15;
+  width:34px;height:56px;border-radius:10px;cursor:pointer;
+  background:rgba(30,30,30,.85);border:1px solid var(--border);color:var(--muted);
+  display:none;align-items:center;justify-content:center;font-size:1.1rem;
+}
+.flecha:hover{color:var(--text);border-color:var(--g98);}
+#flechaIzq{left:8px;} #flechaDer{right:8px;}
+/* Las flechas solo tienen sentido donde hay ratón. Con ellas visibles el módulo
+   gana margen lateral, para que nunca se pongan encima del contenido. */
+@media (hover:hover) and (pointer:fine){
+  .flecha{display:flex;}
+  .modulo{padding-left:52px;padding-right:52px;}
+}
+
+/* ---------- Piezas ---------- */
+h2{font-size:.95rem;margin:0 0 12px;color:var(--muted);font-weight:500;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:15px;margin-bottom:14px;}
+.paso{font-size:.68rem;color:#6E6E6E;letter-spacing:1px;text-transform:uppercase;margin-bottom:9px;}
+label{display:block;font-size:.76rem;color:var(--muted);margin:0 0 6px;}
+.hint{font-size:.71rem;color:#6E6E6E;margin:-8px 0 12px;line-height:1.45;}
+input,select,textarea{
+  width:100%;background:#0E0E0E;border:1px solid var(--border);color:var(--text);
+  padding:11px;border-radius:10px;font-size:16px;margin-bottom:11px;font-family:inherit;
+}
+input:focus,select:focus{outline:none;border-color:var(--g98);}
+input.mal{border-color:var(--rojo);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;align-items:end;}
+.btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:.98rem;
+  font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px;}
+.btn-primary{background:linear-gradient(90deg,var(--glp),var(--g98));color:#000;
+  box-shadow:0 0 14px rgba(40,242,2,.45),0 0 22px rgba(0,255,255,.3);}
+.btn-primary.alerta{background:linear-gradient(90deg,var(--oro),var(--rojo));
+  box-shadow:0 0 14px rgba(255,209,102,.4);}
+.btn-ghost{background:#0E0E0E;border:1px dashed var(--g98);color:var(--g98);font-weight:500;}
+.btn-ghost.ok{border-style:solid;color:var(--glp);border-color:var(--glp);}
+.btn-rojo{background:#0E0E0E;border:1px solid var(--rojo);color:var(--rojo);font-weight:500;}
+.btn:disabled{opacity:.45;box-shadow:none;}
+.row-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+#preview{max-width:100%;border-radius:10px;margin-bottom:12px;display:none;}
+#status{margin-top:6px;font-size:.83rem;color:var(--muted);min-height:1.2em;line-height:1.5;}
+.aviso{color:var(--rojo);}
+.ok{color:var(--glp);}
+.oro{color:var(--oro);}
+canvas{max-width:100%;}
+.chart-box{position:relative;width:100%;height:230px;}
+.chart-box.alto{height:265px;}
+.mini{background:none;border:1px solid var(--border);color:var(--muted);
+  padding:5px 9px;border-radius:8px;font-size:.72rem;cursor:pointer;margin-left:6px;font-family:inherit;}
+.mini:hover{color:var(--text);border-color:var(--g98);}
+.legend{display:flex;gap:13px;flex-wrap:wrap;margin-bottom:11px;font-size:.76rem;}
+.legend-item{display:flex;align-items:center;gap:6px;}
+.legend-swatch{width:11px;height:11px;border-radius:3px;display:inline-block;}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.kpi{background:#151515;border:1px solid var(--border);border-radius:12px;padding:11px;}
+.kpi .k{font-size:.67rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+.kpi .v{font-size:1.2rem;font-weight:700;margin-top:4px;}
+.kpi .s{font-size:.7rem;color:#6E6E6E;margin-top:3px;line-height:1.45;}
+.kpi.wide{grid-column:1 / -1;}
+.toggle{display:flex;background:#0E0E0E;border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:13px;}
+.toggle button{flex:1;background:none;border:none;color:var(--muted);padding:8px;border-radius:7px;
+  font-size:.8rem;cursor:pointer;font-family:inherit;}
+.toggle button.on{background:var(--g98);color:#000;font-weight:600;}
+#revision{display:none;}
+.item{border:1px solid var(--border);border-radius:10px;padding:11px;margin-bottom:11px;background:#151515;}
+.item.parcial{border-color:var(--oro);}
+.item .cab{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.pill{font-size:.7rem;padding:3px 9px;border-radius:99px;font-weight:600;color:#000;}
+.del{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;
+  padding:4px 9px;font-size:.7rem;cursor:pointer;font-family:inherit;}
+.barra-mix{height:8px;border-radius:99px;background:#0E0E0E;overflow:hidden;display:flex;margin-top:8px;}
+.barra-mix i{display:block;height:100%;}
+.check{display:flex;align-items:center;gap:10px;padding:9px 0 2px;cursor:pointer;}
+.check input{width:22px;height:22px;margin:0;accent-color:var(--glp);flex:0 0 auto;}
+.check span{font-size:.83rem;color:var(--text);}
+.check small{display:block;font-size:.71rem;color:#6E6E6E;margin-top:2px;line-height:1.35;}
+
+/* Depósitos */
+.dep{margin-bottom:11px;}
+.dep .fila{display:flex;justify-content:space-between;font-size:.76rem;margin-bottom:5px;}
+.dep .fila b{font-weight:600;}
+.tanque{height:9px;border-radius:99px;background:#0E0E0E;overflow:hidden;}
+.tanque i{display:block;height:100%;border-radius:99px;transition:width .4s;}
+
+/* Historial */
+.rep{background:#151515;border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;}
+.rep .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;}
+.rep .fecha{font-size:.82rem;font-weight:600;}
+.rep .est{font-size:.72rem;color:var(--muted);margin-top:2px;}
+.rep .imp{font-size:1.05rem;font-weight:700;white-space:nowrap;}
+.rep .comb{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px;}
+.rep .tag{font-size:.7rem;padding:3px 8px;border-radius:99px;background:#0E0E0E;border:1px solid var(--border);}
+.rep .tag b{font-weight:600;}
+.rep .acciones{display:flex;gap:7px;}
+.rep .acciones button,.rep .acciones a{
+  flex:1;text-align:center;text-decoration:none;background:#0E0E0E;border:1px solid var(--border);
+  color:var(--muted);border-radius:8px;padding:7px 4px;font-size:.73rem;cursor:pointer;font-family:inherit;}
+.rep .acciones a:hover,.rep .acciones button:hover{color:var(--text);border-color:var(--g98);}
+.rep .acciones .peligro:hover{color:var(--rojo);border-color:var(--rojo);}
+.rep.abierto{border-color:var(--g98);}
+.editor{border-top:1px solid var(--border);margin-top:11px;padding-top:11px;}
+.vacio{color:#6E6E6E;font-size:.82rem;text-align:center;padding:22px 10px;line-height:1.6;}
+
+/* Ranking de estaciones */
+.rank{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);}
+.rank:last-child{border-bottom:none;}
+.rank .pos{width:22px;font-size:.8rem;color:#6E6E6E;text-align:center;flex:0 0 auto;}
+.rank .nom{flex:1;font-size:.8rem;line-height:1.3;}
+.rank .nom small{display:block;color:#6E6E6E;font-size:.7rem;margin-top:2px;}
+.rank .val{font-size:.85rem;font-weight:700;white-space:nowrap;}
+
+.modal{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.75);
+  display:none;align-items:center;justify-content:center;padding:20px;}
+.modal.on{display:flex;}
+.modal .caja{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+  padding:18px;max-width:340px;width:100%;}
+.modal h3{margin:0 0 10px;font-size:1rem;}
+.modal p{font-size:.82rem;color:var(--muted);line-height:1.55;margin:0 0 14px;}
+
+/* ---------- Pantalla de bloqueo ----------
+   Tapa la app entera hasta que el código guardado en este móvil vale. No es
+   la seguridad de verdad (esa la pone la función de Netlify rechazando las
+   peticiones sin código), pero evita que se vean los datos. */
+#bloqueo{
+  position:fixed;inset:0;z-index:60;background:var(--bg);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  padding:calc(24px + env(safe-area-inset-top)) 22px calc(24px + env(safe-area-inset-bottom));
+  text-align:center;
+}
+#bloqueo.on{display:flex;}
+#bloqueo .logo{width:96px;height:96px;display:block;margin:0 auto 14px;}
+#bloqueo h1{font-size:1.15rem;margin:0 0 6px;letter-spacing:.4px;}
+#bloqueo h1 span{color:var(--glp);text-shadow:0 0 8px var(--glp);}
+#bloqueo p{font-size:.82rem;color:var(--muted);line-height:1.55;margin:0 0 20px;max-width:300px;}
+#bloqueo form{width:100%;max-width:300px;}
+#bloqueo input{
+  width:100%;background:#151515;border:1px solid var(--border);border-radius:10px;
+  color:var(--text);font-size:1.1rem;padding:13px 14px;text-align:center;
+  letter-spacing:3px;margin-bottom:12px;
+}
+#bloqueo input:focus{outline:none;border-color:var(--glp);}
+#estadoBloqueo{font-size:.8rem;min-height:1.3em;margin-top:12px;}
+/* Salir es cosa de una vez cada mucho: no compite con los botones de arriba. */
+#btnSalir{font-size:.75rem;padding:9px;color:#6E6E6E;border:1px solid var(--border);
+  background:transparent;font-weight:400;margin-bottom:0;}
+
+/* ---------- Tirar hacia abajo para actualizar ----------
+   El indicador vive fuera del carril: se mueve con transform, así que no
+   provoca reflow ni empuja el contenido. */
+#ptr{
+  position:fixed;left:50%;top:calc(6px + env(safe-area-inset-top));z-index:30;
+  width:34px;height:34px;margin-left:-17px;border-radius:50%;
+  background:var(--panel);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--glp);font-size:1rem;
+  opacity:0;transform:translateY(-46px);pointer-events:none;
+}
+#ptr.suelto{transition:transform .22s ease, opacity .22s ease;}
+#ptr.girando svg{animation:girar .9s linear infinite;}
+#ptr svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.1;
+  stroke-linecap:round;stroke-linejoin:round;}
+@keyframes girar{to{transform:rotate(360deg);}}

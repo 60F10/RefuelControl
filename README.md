@@ -57,10 +57,29 @@ Sin base de datos propia, sin servidor que mantener y con coste cero dentro de l
 
 ## Qué hay en el repo
 
+Una cosa, un archivo. Módulos ES nativos, sin paso de compilación: Netlify publica los archivos tal cual.
+
 ```
-index.html              La app entera: HTML, CSS y JS en un archivo
-Script.Repostaje.gs     Backend de Apps Script, para pegar en el editor
-appsscript.json         Manifiesto del script: zona horaria y permisos
+index.html              Solo el marcado de los seis módulos de la pantalla
+css/estilos.css         Todos los estilos
+js/
+  app.js                Arranque: monta las piezas y reparte quién pinta qué
+  config.js             El coche activo, colores, CO2 y demás constantes
+  formato.js            Euros, kilómetros y fechas         <- puro, con pruebas
+  calculo.js            Agregados y desviación por estación <- puro, con pruebas
+  validacion.js         Reglas de la validación previa     <- puro, con pruebas
+  datos.js              Guarda la última respuesta del backend y la reparte
+  api.js                Lo único que habla con /api/repostaje
+  offline.js            Cola en IndexedDB y sincronización
+  ubicacion.js          Geolocalización y estación más cercana
+  bloqueo.js            Pantalla del código de acceso
+  navegacion.js         El carril de módulos y la barra de pestañas
+  refresco.js           Tirar hacia abajo y refresco al volver a la app
+  servicio.js           Registro del service worker
+  dom.js                Los cuatro atajos del DOM
+  ui/                   Un archivo por módulo, más graficos.js y depositos.js
+apps-script/            El backend, partido por responsabilidades (00_Config … 09_Menu)
+  appsscript.json       Manifiesto del script: zona horaria y permisos
 manifest.json           Manifiesto de la PWA
 sw.js                   Service worker, estrategia red primero
 netlify.toml            Publicación y redirección de /api
@@ -69,7 +88,11 @@ img/                    Iconos de la PWA y capturas de pantalla
 test/                   Bancos de pruebas y prueba de humo en Chromium
 ```
 
-Si mueves los iconos, hay que cambiar la ruta en tres sitios: el `apple-touch-icon` de `index.html`, el array `icons` de `manifest.json` y la lista `ESTATICOS` de `sw.js`.
+Lo que calcula no toca ni el DOM ni la red: `formato.js`, `calculo.js` y `validacion.js` reciben datos y devuelven datos, así que se prueban sin navegador. La red vive entera en `api.js`.
+
+**Si añades un archivo al front, méte­lo en la lista `ESTATICOS` de `sw.js`.** Si no, la app deja de funcionar sin cobertura y no avisa; `test/rutas.test.js` lo comprueba por ti. Con los iconos pasa lo mismo en tres sitios: el `apple-touch-icon` de `index.html`, el array `icons` de `manifest.json` y esa misma lista.
+
+Con módulos ES, abrir `index.html` con doble clic (`file://`) ya no vale: hay que servirlo. Para desarrollo sirve el servidor que levanta `node test/pantalla.js`.
 
 ---
 
@@ -78,7 +101,7 @@ Si mueves los iconos, hay que cambiar la ruta en tres sitios: el `apple-touch-ic
 ### 1. Google Sheets y Apps Script
 
 1. Crea una hoja de cálculo. En la primera pestaña, pon `ID` en la celda **A1**: el script localiza la hoja por ese valor.
-2. **Extensiones → Apps Script** y pega el contenido de `Script.Repostaje.gs`.
+2. **Extensiones → Apps Script**. Crea un archivo por cada `.gs` de `apps-script/`, con el mismo nombre, y pega su contenido. Apps Script los mete a todos en el mismo ámbito global, así que el orden solo importa para leerlos.
 3. **Configuración del proyecto → Propiedades del script**, y añade:
 
    | Propiedad | Valor |
@@ -87,7 +110,7 @@ Si mueves los iconos, hay que cambiar la ruta en tres sitios: el `apple-touch-ic
    | `SHARED_TOKEN` | una cadena larga y aleatoria que inventes |
    | `CARPETA_RECIBOS_ID` | el ID de la carpeta de Drive donde guardar los tickets |
 
-4. Marca **Mostrar el archivo de manifiesto `appsscript.json`** y pega el del repo. Los permisos son estos:
+4. Marca **Mostrar el archivo de manifiesto `appsscript.json`** y pega el de `apps-script/`. Los permisos son estos:
 
    ```json
    "oauthScopes": [
@@ -283,11 +306,21 @@ Si el disparador falla por permisos, el aviso lo dice: hay que añadir el scope 
 ## Pruebas
 
 ```bash
-npm test              # motor de cálculo y agregados del dashboard, sin dependencias
+npm test              # cinco bancos sin dependencias
 node test/pantalla.js # prueba de humo en Chromium (necesita playwright y chart.js)
 ```
 
-`test/motor.test.js` carga `Script.Repostaje.gs` con un Sheet simulado, así que prueba el código que se despliega, no una copia. `test/dashboard.test.js` extrae el `<script>` de `index.html` y comprueba los agregados con datos de ejemplo. `test/seguridad.test.js` mete peticiones simuladas en la función de Netlify de verdad y comprueba que sin código no se llega al Apps Script. La prueba de humo recorre además la pantalla de bloqueo, el gesto de tirar hacia abajo y el borrado.
+`npm test` descubre solo los bancos de `test/`:
+
+| Banco | Qué comprueba |
+|---|---|
+| `motor.test.js` | Carga los `.gs` de `apps-script/` con un Sheet simulado, así que prueba el código que se despliega |
+| `dashboard.test.js` | Importa `js/calculo.js` de verdad y comprueba los agregados con datos de ejemplo |
+| `validacion.test.js` | Las reglas de la validación previa, caso a caso |
+| `rutas.test.js` | Que todo lo que se importa existe y está en el service worker |
+| `Seguridad.test.js` | Mete peticiones simuladas en la función de Netlify de verdad: sin código no se llega al Apps Script |
+
+La prueba de humo recorre los seis módulos en Chromium y comprueba además la pantalla de bloqueo, el gesto de tirar hacia abajo y el borrado.
 
 ---
 
