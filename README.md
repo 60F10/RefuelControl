@@ -4,7 +4,7 @@ PWA para registrar los repostajes de un coche **bífuel GLP + gasolina** (Dacia 
 
 Haces una foto del ticket, la IA extrae los datos, tú los revisas y se guardan en Google Sheets. El dashboard vive dentro de la propia app, repartido en seis módulos que se recorren deslizando el dedo.
 
-**Demo:** https://repostajesgofio.netlify.app/
+**Demo:** https://repostajesgofio.netlify.app/ (En desarrollo una demo usable)
 
 ![Los módulos de la app](img/Screenshots/modulos.png)
 
