@@ -169,6 +169,8 @@ canvas{max-width:100%;}
 .rep .acciones .peligro:hover{color:var(--rojo);border-color:var(--rojo);}
 .rep.abierto{border-color:var(--g98);}
 .editor{border-top:1px solid var(--border);margin-top:11px;padding-top:11px;}
+.editor .e-preview{max-width:100%;border-radius:10px;margin-bottom:10px;}
+.editor .e-estadoFoto{margin:-4px 0 10px;min-height:1.1em;}
 .vacio{color:#6E6E6E;font-size:.82rem;text-align:center;padding:22px 10px;line-height:1.6;}
 
 /* Ranking de estaciones */

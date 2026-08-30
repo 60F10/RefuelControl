@@ -11,8 +11,10 @@ import { eur, km, dec, esc, fechaLarga } from '../formato.js';
 import { api, apiGet } from '../api.js';
 import { registros, cargarDashboard, quitarTicket } from '../datos.js';
 import { ordenarTickets } from '../calculo.js';
+import { prepararFoto, subirFoto } from '../foto.js';
 
 let editando = null;           // id del repostaje abierto en el historial
+let reciboNuevo = null;        // ticket subido en esta edición, si se ha añadido uno
 
 const estado = (html, clase) => {
   $('estadoHistorial').innerHTML = clase ? '<span class="' + clase + '">' + html + '</span>' : html;
@@ -78,9 +80,11 @@ function abrirEditor(id) {
     if (previa) { previa.style.display = 'none'; $('rep-' + editando).classList.remove('abierto'); }
   }
   editando = id;
+  reciboNuevo = null;
 
   const filas = registros().filter(r => r.id === id);
   const ref = filas[0];
+  const tieneTicket = filas.some(r => r.recibo);
 
   caja.innerHTML = `
     <div class="grid2">
@@ -117,13 +121,72 @@ function abrirEditor(id) {
           <span>Depósito lleno</span>
         </label>
       </div>`).join('')}</div>
+    <label>Ticket</label>
+    <input type="file" class="e-foto" accept="image/*" hidden>
+    <button class="btn btn-ghost e-adjuntar">${tieneTicket ? 'Cambiar la foto del ticket' : 'Añadir la foto del ticket'}</button>
+    <img class="e-preview" alt="Ticket" style="display:none">
+    <div class="e-estadoFoto hint" style="margin-top:-4px"></div>
     <div class="e-aviso"></div>
     <button class="btn btn-primary e-guardar">Guardar cambios</button>`;
 
   caja.style.display = 'block';
   tarjeta.classList.add('abierto');
   caja.querySelector('.e-guardar').onclick = () => guardarEdicion(id, caja);
+  montarAdjuntar(caja);
   caja.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/**
+ * Adjuntar el ticket después (roadmap: se echaba en falta).
+ *
+ * Si el día del repostaje no pudiste subir la foto —sin cobertura, la cámara
+ * que no la entrega, o simplemente se te pasó—, aquí se añade. La foto se sube
+ * a Drive en cuanto la eliges, pero no queda enganchada al repostaje hasta que
+ * pulsas «Guardar cambios»: el backend ya sabe conservar el recibo anterior si
+ * no le mandas uno nuevo.
+ */
+function montarAdjuntar(caja) {
+  const entrada = caja.querySelector('.e-foto');
+  const preview = caja.querySelector('.e-preview');
+  const estadoFoto = caja.querySelector('.e-estadoFoto');
+
+  caja.querySelector('.e-adjuntar').onclick = () => entrada.click();
+
+  entrada.onchange = async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) {
+      estadoFoto.innerHTML = '<span class="aviso">No llegó ninguna foto. Prueba otra vez.</span>';
+      return;
+    }
+
+    estadoFoto.textContent = 'Preparando la foto...';
+    let foto;
+    try {
+      foto = await prepararFoto(file);
+    } catch (err) {
+      estadoFoto.innerHTML = '<span class="aviso">' + esc(err.message) + '</span>';
+      return;
+    }
+
+    preview.src = foto.dataUrl;
+    preview.style.display = 'block';
+
+    if (!navigator.onLine) {
+      estadoFoto.innerHTML = '<span class="aviso">Sin conexión no se puede subir el ticket. Inténtalo con cobertura.</span>';
+      return;
+    }
+
+    estadoFoto.textContent = 'Subiendo el ticket a Drive...';
+    try {
+      const recibo = await subirFoto(foto.b64, foto.mime);
+      if (recibo.error) throw new Error(recibo.error);
+      reciboNuevo = recibo;
+      estadoFoto.innerHTML = '<span class="ok">Ticket subido. Pulsa «Guardar cambios» para dejarlo asociado.</span>';
+    } catch (err) {
+      estadoFoto.innerHTML = '<span class="aviso">No se pudo subir: ' + esc(err.message) + '</span>';
+    }
+  };
 }
 
 async function guardarEdicion(id, caja) {
@@ -157,6 +220,8 @@ async function guardarEdicion(id, caja) {
         kmTotales,
         lecturaGLP: caja.querySelector('.e-lecGlp').value,
         lecturaGasolina: caja.querySelector('.e-lecGas').value,
+        // Sin recibo nuevo, el backend conserva el que ya tuviera
+        recibo: reciboNuevo,
         items
       }
     });
@@ -166,6 +231,7 @@ async function guardarEdicion(id, caja) {
     (r.avisos || []).concat(r.ordenAvisos || []).forEach(a => { msg += ' ⚠️ ' + a.texto; });
     estado(esc(msg), 'ok');
     editando = null;
+    reciboNuevo = null;
     await cargarDashboard();
   } catch (err) {
     if (err.noAutorizado) return;
@@ -266,6 +332,16 @@ export function montarHistorial() {
     const idBorrar = e.target.dataset.borrar;
     if (idEditar) abrirEditor(idEditar);
     if (idBorrar) confirmarBorrado(idBorrar);
+  });
+
+  // La etiqueta de color del editor sigue al desplegable, igual que en el alta
+  $('listaRepostajes').addEventListener('change', e => {
+    if (!e.target.classList.contains('f-tipo')) return;
+    const caja = e.target.closest('.item');
+    const etiqueta = caja && caja.querySelector('.pill');
+    if (!etiqueta) return;
+    etiqueta.textContent = e.target.value;
+    etiqueta.style.background = colorDe(e.target.value);
   });
 
   $('modalNo').onclick = () => $('modal').classList.remove('on');

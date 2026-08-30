@@ -1,6 +1,6 @@
 // Sube este número si quieres forzar el borrado de la caché en los móviles.
 // Para un cambio normal en index.html no hace falta: la estrategia es "red primero".
-const CACHE = 'repostajes-v8';
+const CACHE = 'repostajes-v9';
 
 // Si mueves, renombras o añades alguno de estos archivos, acuérdate de cambiarlo
 // aquí: sin cobertura, lo que no esté en esta lista no existe. `test/rutas.test.js`
@@ -18,6 +18,7 @@ const ESTATICOS = [
   './js/datos.js',
   './js/dom.js',
   './js/formato.js',
+  './js/foto.js',
   './js/navegacion.js',
   './js/offline.js',
   './js/refresco.js',
@@ -59,6 +60,45 @@ self.addEventListener('activate', e => {
   );
 });
 
+// Cuánto se espera a la red antes de tirar de la caché. Un `fetch` no falla
+// cuando estás conectado a una wifi que no navega: se queda colgado, y con él
+// la app entera. Por eso hay un tiempo límite y no solo un `catch`.
+const ESPERA_RED = 3000;
+
+/**
+ * Red primero, pero con reloj: si en ESPERA_RED no ha contestado, se sirve lo
+ * que haya en caché y la app arranca igual. Con el móvil ya en modo avión ni se
+ * intenta. Sigue siendo red primero, así que un despliegue nuevo se ve al
+ * momento; lo que cambia es que una red muerta ya no cuelga nada.
+ */
+async function conReloj(req) {
+  const cache = await caches.open(CACHE);
+
+  if (!self.navigator.onLine) {
+    const guardada = await cache.match(req);
+    if (guardada) return guardada;
+  }
+
+  const corta = new AbortController();
+  const reloj = setTimeout(() => corta.abort(), ESPERA_RED);
+
+  try {
+    const res = await fetch(req, { signal: corta.signal });
+    clearTimeout(reloj);
+    if (res && res.ok) cache.put(req, res.clone()).catch(() => {});
+    return res;
+  } catch (err) {
+    clearTimeout(reloj);
+    const guardada = await cache.match(req);
+    if (guardada) return guardada;
+    if (req.mode === 'navigate') {
+      const inicio = await cache.match('./index.html');
+      if (inicio) return inicio;
+    }
+    throw err;
+  }
+}
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   const url = new URL(req.url);
@@ -68,14 +108,5 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/.netlify/')) return;
 
-  // Red primero, caché como red de seguridad cuando no hay cobertura.
-  e.respondWith(
-    fetch(req)
-      .then(res => {
-        const copia = res.clone();
-        caches.open(CACHE).then(c => c.put(req, copia)).catch(() => {});
-        return res;
-      })
-      .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
-  );
+  e.respondWith(conReloj(req));
 });

@@ -254,6 +254,24 @@ const MODULOS = ['repostar', 'resumen', 'consumos', 'estaciones', 'historial', '
   const reps = await comprobar('Repostajes del historial', '#listaRepostajes .rep', 6);
   await comprobar('Enlaces al ticket', '#listaRepostajes a', 1);
 
+  // ---- El editor: adjuntar el ticket a posteriori y la etiqueta de color ----
+  await pagina.click('[data-editar="REP-100003"]');
+  await pagina.waitForTimeout(500);
+
+  const adjuntar = await pagina.$$eval('#editor-REP-100003 .e-adjuntar', els => els.length);
+  if (!adjuntar) await fallar('El editor no ofrece añadir la foto del ticket.');
+
+  await pagina.selectOption('#editor-REP-100003 .item .f-tipo', 'Gasolina 95');
+  await pagina.waitForTimeout(250);
+  const pillEditor = await pagina.$eval('#editor-REP-100003 .item .pill', el => el.textContent.trim());
+  if (pillEditor !== 'Gasolina 95') {
+    await fallar('En el editor, la etiqueta no sigue al desplegable (pone «' + pillEditor + '»).');
+  }
+  console.log('Editor: botón de ticket presente y la etiqueta sigue al tipo elegido.');
+  await pagina.screenshot({ path: path.join(CAPTURAS, '5b-editor.png') });
+  await pagina.click('[data-editar="REP-100003"]');   // cerrar sin guardar
+  await pagina.waitForTimeout(300);
+
   await pagina.click('#barra button:nth-child(6)');
   await pagina.waitForTimeout(500);
   const curios = await comprobar('Curiosidades', '#kpisRecords .kpi', 5);
@@ -291,6 +309,23 @@ const MODULOS = ['repostar', 'resumen', 'consumos', 'estaciones', 'historial', '
       await fallar('No encuentro «' + opciones.join('» ni «') + '» donde debería estar.');
     }
   }
+
+  // ---- En el alta, la etiqueta de color también sigue al desplegable ----
+  await pagina.click('#barra button:nth-child(1)');
+  await pagina.waitForTimeout(500);
+  await pagina.click('#btnManual');
+  await pagina.waitForTimeout(500);
+  const pillInicial = await pagina.$eval('#items .item .pill', el => el.textContent.trim());
+  if (pillInicial !== 'GLP') await fallar('El alta no arranca con la etiqueta de GLP (pone «' + pillInicial + '»).');
+  await pagina.selectOption('#items .item .f-tipo', 'Gasolina 98');
+  await pagina.waitForTimeout(250);
+  const pillAlta = await pagina.$eval('#items .item .pill', el => el.textContent.trim());
+  if (pillAlta !== 'Gasolina 98') {
+    await fallar('En el alta, la etiqueta se queda en «' + pillAlta + '» al cambiar el tipo.');
+  }
+  console.log('Alta: la etiqueta pasa de GLP a Gasolina 98 al cambiar el desplegable.');
+  await pagina.click('#btnCancelar');
+  await pagina.waitForTimeout(300);
 
   // ---- El deslizamiento con el dedo también cambia de módulo ----
   await pagina.click('#barra button:nth-child(1)');

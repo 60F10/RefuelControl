@@ -178,6 +178,18 @@ console.log('\nCódigo de acceso y anticaché — RefuelControl\n');
     assert.ok(/touchmove/.test(refresco) && /PTR\.umbral/.test(refresco), 'falta el pull-to-refresh');
   });
 
+  prueba('Ninguna llamada a la API se queda esperando para siempre', () => {
+    // El caso malo no es no tener red: es tener una que no navega. Ahí el fetch
+    // no falla, se queda colgado, y la app entera con él.
+    const llamadas = api.match(/await fetch\(/g) || [];
+    const relojes = api.match(/signal: reloj\.signal/g) || [];
+    assert.strictEqual(relojes.length, llamadas.length,
+      'hay ' + llamadas.length + ' llamadas y solo ' + relojes.length + ' con tiempo límite');
+    assert.ok(/sinRespuesta/.test(api), 'una espera agotada debe distinguirse de un error cualquiera');
+    assert.ok(/err\.sinRespuesta/.test(leerJs('js/bloqueo.js')),
+      'la pantalla de bloqueo debe dejar entrar cuando el servidor no contesta');
+  });
+
   prueba('Solo api.js habla con la red, y solo con /api/repostaje', () => {
     const modulos = [];
     const recorrer = dir => fs.readdirSync(path.join(RAIZ, dir)).forEach(f => {

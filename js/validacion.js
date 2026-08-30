@@ -19,6 +19,7 @@ import { eur, km, dec } from './formato.js';
  *   lecGLP      parcial de GLP del ordenador de a bordo
  *   lecGas      parcial de gasolina
  *   fechaTicket fecha del ticket, o cadena vacía
+ *   estacion    nombre de la estación, o cadena vacía
  *   items       [{ tipo, litros, precio_litro, total, lleno }]
  *   coche       opcional: el coche activo, por si algún día hay varios
  * @returns {{errores: string[], avisos: string[], marcar: string[]}}
@@ -92,6 +93,12 @@ export function validarRepostaje(e) {
 
   if (!e.fechaTicket) {
     avisos.push('Sin fecha del ticket, los gráficos usarán la fecha de hoy.');
+  }
+
+  // Sin estación el repostaje se guarda igual, pero se queda fuera del ranking
+  // y del coste de oportunidad, que comparan por estación.
+  if (!String(e.estacion || '').trim()) {
+    avisos.push('Sin estación, este repostaje no entra en el ranking ni en el coste de oportunidad.');
   }
 
   return { errores, avisos, marcar };

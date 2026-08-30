@@ -63,7 +63,12 @@ export function montarBloqueo(entrar) {
     } catch (err) {
       // Sin cobertura no se puede comprobar, pero tampoco hay nada que enseñar:
       // se guarda el código y ya se validará en la primera llamada con red.
-      if (!navigator.onLine) {
+      //
+      // `err.sinRespuesta` es el mismo caso disfrazado: el móvil se cree
+      // conectado —una wifi sin salida, un portal cautivo— y la petición no
+      // falla, solo se agota. Antes eso dejaba la app encallada en esta
+      // pantalla; ahora entra y trabaja con lo que tenga en la caché.
+      if (!navigator.onLine || err.sinRespuesta) {
         guardarCodigo(valor);
         desbloquear();
         alEntrar();

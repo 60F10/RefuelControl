@@ -30,6 +30,30 @@ export function guardarCodigo(valor) {
 let avisarNoAutorizado = () => {};
 export function alPerderCodigo(fn) { avisarNoAutorizado = fn; }
 
+// Cuánto se espera a la API antes de darla por muerta. Sin esto, una wifi que no
+// navega deja la petición colgada para siempre: el `fetch` no falla, así que la
+// app se queda «pescando» y ni el indicador de refresco se cierra.
+const ESPERA_LECTURA = 12000;
+const ESPERA_ESCRITURA = 25000;   // guardar dispara un recálculo, tarda más
+
+/** AbortSignal.timeout() no está en todos los Safari; esto sí. */
+function conReloj(ms) {
+  const corta = new AbortController();
+  const reloj = setTimeout(() => corta.abort(), ms);
+  return { signal: corta.signal, listo: () => clearTimeout(reloj) };
+}
+
+/** Distingue «la red tardó demasiado» de cualquier otro fallo. */
+function errorDeEspera(err, ms) {
+  if (err && err.name === 'AbortError') {
+    const e = new Error('El servidor no contestó en ' + Math.round(ms / 1000) + ' s. ' +
+                        'Puede que estés conectado a una red sin salida a internet.');
+    e.sinRespuesta = true;
+    return e;
+  }
+  return err;
+}
+
 /** La API siempre responde JSON. Si llega otra cosa, explicamos por qué. */
 export async function leerJSON(res) {
   const txt = await res.text();
@@ -65,21 +89,37 @@ async function responder(res) {
 
 /** Lectura. El sufijo `_` es anticaché: sin él Google puede servir datos viejos. */
 export async function apiGet(consulta) {
-  const res = await fetch(API + '?' + consulta + '&_=' + Date.now(), {
-    cache: 'no-store',
-    headers: { 'X-Codigo': CODIGO, 'Cache-Control': 'no-cache' }
-  });
-  return responder(res);
+  const reloj = conReloj(ESPERA_LECTURA);
+  try {
+    const res = await fetch(API + '?' + consulta + '&_=' + Date.now(), {
+      cache: 'no-store',
+      signal: reloj.signal,
+      headers: { 'X-Codigo': CODIGO, 'Cache-Control': 'no-cache' }
+    });
+    return await responder(res);
+  } catch (err) {
+    throw errorDeEspera(err, ESPERA_LECTURA);
+  } finally {
+    reloj.listo();
+  }
 }
 
 /** Escritura. */
 export async function api(payload) {
-  const res = await fetch(API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Codigo': CODIGO },
-    body: JSON.stringify(payload)
-  });
-  return responder(res);
+  const reloj = conReloj(ESPERA_ESCRITURA);
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      signal: reloj.signal,
+      headers: { 'Content-Type': 'application/json', 'X-Codigo': CODIGO },
+      body: JSON.stringify(payload)
+    });
+    return await responder(res);
+  } catch (err) {
+    throw errorDeEspera(err, ESPERA_ESCRITURA);
+  } finally {
+    reloj.listo();
+  }
 }
 
 /**
@@ -87,12 +127,20 @@ export async function api(payload) {
  * proxy lo rechaza; lanza si no hubo forma de preguntar.
  */
 export async function comprobarCodigo(valor) {
-  const res = await fetch(API + '?action=comprobar&_=' + Date.now(), {
-    cache: 'no-store',
-    headers: { 'X-Codigo': valor }
-  });
-  if (res.status === 401) return false;
-  const d = await leerJSON(res);
-  if (!d.ok) throw new Error(d.error || 'sin respuesta');
-  return true;
+  const reloj = conReloj(ESPERA_LECTURA);
+  try {
+    const res = await fetch(API + '?action=comprobar&_=' + Date.now(), {
+      cache: 'no-store',
+      signal: reloj.signal,
+      headers: { 'X-Codigo': valor }
+    });
+    if (res.status === 401) return false;
+    const d = await leerJSON(res);
+    if (!d.ok) throw new Error(d.error || 'sin respuesta');
+    return true;
+  } catch (err) {
+    throw errorDeEspera(err, ESPERA_LECTURA);
+  } finally {
+    reloj.listo();
+  }
 }

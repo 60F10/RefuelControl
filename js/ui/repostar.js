@@ -7,7 +7,8 @@
 //  ui/depositos.js.
 // ==========================================================
 
-import { TIPOS, FOTO, colorDe } from '../config.js';
+import { TIPOS, colorDe } from '../config.js';
+import { prepararFoto } from '../foto.js';
 import { $, $$, info, statusEl, lineaAviso } from '../dom.js';
 import { eur, km, dec, esc, ddmm } from '../formato.js';
 import { api } from '../api.js';
@@ -24,35 +25,54 @@ let avisosAceptados = false;
 const cercana = () => estacionMasCercana(datos().ubicaciones);
 
 // ==========================================================
-//  Foto: se reduce en el móvil antes de subirla.
-//  Esto además convierte los HEIC del iPhone a JPEG.
+//  La foto del ticket
+//
+//  El trabajo sucio está en js/foto.js. Aquí solo se encadena con la
+//  pantalla y —sobre todo— se avisa cuando algo no sale, que es lo que
+//  faltaba: si la cámara volvía sin foto, la app se quedaba callada y
+//  parecía que no habías pulsado nada.
 // ==========================================================
-function procesarFoto(file) {
-  if (!file) return;
+let esperandoCamara = false;
+
+async function procesarFoto(file, origen) {
+  esperandoCamara = false;
+  if (!file) {
+    info('La ' + (origen === 'camara' ? 'cámara' : 'galería') + ' no devolvió ninguna foto. ' +
+         'Inténtalo otra vez o registra el repostaje y añade el ticket luego, desde el Historial.', 'aviso');
+    return;
+  }
+
   info('Preparando la foto...');
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      const escala = Math.min(1, FOTO.maxLado / Math.max(img.width, img.height));
-      const cv = document.createElement('canvas');
-      cv.width = Math.round(img.width * escala);
-      cv.height = Math.round(img.height * escala);
-      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-      const dataUrl = cv.toDataURL('image/jpeg', FOTO.calidad);
-      fotoB64 = dataUrl.split(',')[1];
-      fotoMime = 'image/jpeg';
-      RECIBO = null;
-      $('preview').src = dataUrl;
-      $('preview').style.display = 'block';
-      $('btnCam').classList.add('ok');
-      $('btnGal').classList.add('ok');
-      info('Ticket listo (' + Math.round(fotoB64.length * 0.75 / 1024) + ' KB).');
-    };
-    img.onerror = () => info('No se pudo leer esa imagen. Prueba con otra.', 'aviso');
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
+  try {
+    const foto = await prepararFoto(file);
+    fotoB64 = foto.b64;
+    fotoMime = foto.mime;
+    RECIBO = null;
+    $('preview').src = foto.dataUrl;
+    $('preview').style.display = 'block';
+    $('btnCam').classList.add('ok');
+    $('btnGal').classList.add('ok');
+    info('Ticket listo (' + Math.round(fotoB64.length * 0.75 / 1024) + ' KB).');
+  } catch (err) {
+    info('❌ ' + err.message, 'aviso');
+  }
+}
+
+/**
+ * Algunas cámaras de Android vuelven sin entregar el archivo y el evento
+ * `change` no llega nunca. Antes eso era un silencio absoluto; ahora, si al
+ * volver a la app no ha aparecido ninguna foto, se dice y se ofrece salida.
+ */
+function vigilarVueltaDeCamara() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !esperandoCamara) return;
+    setTimeout(() => {
+      if (!esperandoCamara) return;      // la foto llegó, todo en orden
+      esperandoCamara = false;
+      info('La cámara no ha devuelto ninguna foto. Le pasa a algunas cámaras de Android: ' +
+           'prueba con «Galería», o guarda el repostaje y añade el ticket luego, desde el Historial.', 'aviso');
+    }, 1500);
+  });
 }
 
 // ==========================================================
@@ -104,6 +124,21 @@ function pintarItem(it, i) {
     </div>`;
 }
 
+/**
+ * La etiqueta de color de cada bloque sigue al desplegable. Antes se pintaba
+ * una sola vez con lo que hubiera leído Gemini, así que podías cambiar el tipo a
+ * «Gasolina 98» y seguir viendo un GLP verde encima, que es de lo poco que
+ * puede hacerte guardar un repostaje mal creyendo que está bien.
+ */
+function refrescarEtiqueta(caja) {
+  if (!caja) return;
+  const tipo = caja.querySelector('.f-tipo').value;
+  const etiqueta = caja.querySelector('.pill');
+  if (!etiqueta) return;
+  etiqueta.textContent = tipo;
+  etiqueta.style.background = colorDe(tipo);
+}
+
 /** El borde ámbar recuerda de un vistazo qué depósito quedó a medias. */
 function marcarParciales() {
   $$('#items .item').forEach(el => {
@@ -147,6 +182,7 @@ function validar(items) {
     lecGLP: $('lecGlp').value,
     lecGas: $('lecGas').value,
     fechaTicket: $('fechaTicket').value,
+    estacion: $('estacion').value,
     items
   });
 
@@ -296,10 +332,14 @@ export function pintarPistaKm() {
 //  Enganche de los controles
 // ==========================================================
 export function montarRepostar() {
-  $('btnCam').onclick = () => $('inCam').click();
+  $('btnCam').onclick = () => { esperandoCamara = true; $('inCam').click(); };
   $('btnGal').onclick = () => $('inGal').click();
-  $('inCam').onchange = e => procesarFoto(e.target.files[0]);
-  $('inGal').onchange = e => procesarFoto(e.target.files[0]);
+
+  // El `value` se limpia después: si no, repetir la MISMA foto no dispara
+  // `change` otra vez y parece que el botón se ha quedado muerto.
+  $('inCam').onchange = e => { const f = e.target.files[0]; e.target.value = ''; procesarFoto(f, 'camara'); };
+  $('inGal').onchange = e => { const f = e.target.files[0]; e.target.value = ''; procesarFoto(f, 'galeria'); };
+  vigilarVueltaDeCamara();
 
   // Analizar: subir la foto y luego pasarla por Gemini. Dos llamadas cortas,
   // para no agotar el tiempo de la función de Netlify.
@@ -350,6 +390,7 @@ export function montarRepostar() {
 
   $('items').addEventListener('change', e => {
     if (e.target.classList.contains('f-lleno')) marcarParciales();
+    if (e.target.classList.contains('f-tipo')) refrescarEtiqueta(e.target.closest('.item'));
     reiniciarAvisos();
   });
   $('items').addEventListener('input', reiniciarAvisos);

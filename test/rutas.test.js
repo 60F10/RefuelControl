@@ -130,6 +130,16 @@ prueba('El CSS y el módulo de arranque del index existen y están cacheados', (
   assert.ok(!/<script>[\s\S]*<\/script>/.test(html), 'ha vuelto a aparecer JavaScript dentro de index.html');
 });
 
+prueba('El service worker no espera a la red indefinidamente', () => {
+  // Una wifi sin salida no hace fallar el fetch: lo deja colgado, y con él la
+  // app entera. Sin reloj, el arranque sin internet se queda «pescando».
+  const sw = leer('sw.js');
+  assert.ok(/ESPERA_RED\s*=\s*\d+/.test(sw), 'sw.js no declara un tiempo límite de red');
+  assert.ok(/AbortController/.test(sw), 'el fetch del service worker no se puede cortar');
+  assert.ok(/navigator\.onLine/.test(sw), 'estando en modo avión ni debería intentarse la red');
+  assert.ok(!/e\.respondWith\(\s*fetch\(/.test(sw), 'hay un fetch sin reloj respondiendo directamente');
+});
+
 prueba('El backend está partido en archivos y ninguno se ha quedado suelto', () => {
   const carpeta = path.join(RAIZ, 'apps-script');
   assert.ok(fs.existsSync(carpeta), 'no encuentro la carpeta apps-script/');

@@ -31,6 +31,7 @@ function bueno(cambios) {
     lecGLP: '450',
     lecGas: '150',
     fechaTicket: '2026-08-29',
+    estacion: 'E.S. Repsol Valle Guerra',
     items: [{ tipo: 'GLP', litros: 40, precio_litro: 0.90, total: 36, lleno: true }]
   }, cambios || {});
 }
@@ -148,6 +149,12 @@ const contiene = (lista, aguja) =>
   prueba('Sin fecha del ticket avisa', () => {
     const v = validarRepostaje(bueno({ fechaTicket: '' }));
     assert.ok(contiene(v.avisos, 'sin fecha del ticket'));
+  });
+
+  prueba('Sin estación avisa, pero deja guardar', () => {
+    const v = validarRepostaje(bueno({ estacion: '   ' }));
+    assert.deepStrictEqual(v.errores, [], 'no es motivo para bloquear el guardado');
+    assert.ok(contiene(v.avisos, 'no entra en el ranking'));
   });
 
   prueba('El coche activo se puede pasar desde fuera', () => {
