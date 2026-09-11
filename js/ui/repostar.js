@@ -365,9 +365,15 @@ export function montarRepostar() {
 
       paso = 'analizando el ticket';
       info(avisoSubida + 'Analizando el ticket con Gemini...');
-      const r = RECIBO
-        ? await api({ action: 'analizar', fileId: RECIBO.fileId })
-        : await api({ action: 'analizar', imagenBase64: fotoB64, mimeType: fotoMime });
+
+      // Se manda la foto que ya está aquí, aunque la subida haya ido bien. Con
+      // el `fileId`, el backend tenía que releer de Drive un archivo creado
+      // cinco segundos antes: el 11/09/2026 esa lectura tardó 42 s la primera
+      // vez y 5 la segunda, con la misma foto. Drive sale del camino crítico y
+      // el `fileId` queda de respaldo para cuando no haya imagen a mano.
+      const r = fotoB64
+        ? await api({ action: 'analizar', imagenBase64: fotoB64, mimeType: fotoMime })
+        : await api({ action: 'analizar', fileId: RECIBO.fileId });
 
       if (!r.ok) throw new Error(r.error || 'Error desconocido');
 

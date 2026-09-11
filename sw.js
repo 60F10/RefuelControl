@@ -1,6 +1,6 @@
 // Sube este número si quieres forzar el borrado de la caché en los móviles.
 // Para un cambio normal en index.html no hace falta: la estrategia es "red primero".
-const CACHE = 'repostajes-v9';
+const CACHE = 'repostajes-v10';
 
 // Si mueves, renombras o añades alguno de estos archivos, acuérdate de cambiarlo
 // aquí: sin cobertura, lo que no esté en esta lista no existe. `test/rutas.test.js`
