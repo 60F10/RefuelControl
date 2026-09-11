@@ -42,21 +42,50 @@ function analizarTicket(body) {
     'La fecha del ticket es la del repostaje, no la de hoy. ' +
     'Un ticket puede traer uno o dos productos. Usa punto decimal. Sin texto fuera del JSON.';
 
+  // `thinkingBudget: 0` apaga el razonamiento de Gemini 2.5 Flash, que viene
+  // activado por defecto. Con una foto dentro, razonar se lleva entre quince y
+  // treinta segundos, muy por encima de los 10 s que aguanta una función de
+  // Netlify: la petición se cortaba a medias y lo que subía ya no era JSON.
+  // Leer un ticket es extracción, no razonamiento; la calidad no se resiente.
   const payload = {
     contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mime, data: base64 } }] }],
-    generationConfig: { temperature: 0, responseMimeType: 'application/json' }
+    generationConfig: {
+      temperature: 0,
+      responseMimeType: 'application/json',
+      maxOutputTokens: 1024,
+      thinkingConfig: { thinkingBudget: 0 }
+    }
   };
 
+  const arranque = Date.now();
   const res = UrlFetchApp.fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/' + MODELO + ':generateContent?key=' + GEMINI_API_KEY,
     { method: 'post', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true }
   );
+  const msGemini = Date.now() - arranque;
 
   if (res.getResponseCode() !== 200) {
     return { ok: false, error: 'Gemini (' + res.getResponseCode() + '): ' + res.getContentText().slice(0, 300) };
   }
 
-  let texto = JSON.parse(res.getContentText()).candidates[0].content.parts[0].text;
+  // Una respuesta 200 puede venir sin texto: filtro de seguridad, o la salida
+  // cortada por `maxOutputTokens`. Antes se accedía directo a `parts[0].text` y
+  // eso reventaba con un «Cannot read properties of undefined» que no explicaba
+  // nada. El motivo real viene en `finishReason`.
+  const cuerpo = JSON.parse(res.getContentText());
+  const candidato = (cuerpo.candidates || [])[0];
+  const trozo = candidato && candidato.content && candidato.content.parts
+    ? candidato.content.parts[0]
+    : null;
+
+  if (!trozo || !trozo.text) {
+    const motivo = (candidato && candidato.finishReason) ||
+                   (cuerpo.promptFeedback && cuerpo.promptFeedback.blockReason) ||
+                   'sin motivo';
+    return { ok: false, error: 'Gemini no devolvió texto (' + motivo + '). Vuelve a hacer la foto o mete el ticket a mano.' };
+  }
+
+  let texto = trozo.text;
   texto = texto.replace(/```json/g, '').replace(/```/g, '').trim();
 
   let datos;
@@ -77,7 +106,8 @@ function analizarTicket(body) {
     items: (datos.items || []).map(normalizarItem),
     estacionesConocidas: listaEstaciones(),
     ubicaciones: ubicacionesConocidas(),
-    ultimoRegistro: resumenUltimoTicket()
+    ultimoRegistro: resumenUltimoTicket(),
+    msGemini: msGemini
   };
 }
 

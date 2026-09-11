@@ -84,7 +84,21 @@ async function responder(res) {
     avisarNoAutorizado('El código ya no vale. Vuelve a meterlo.');
     throw errorDeCodigo();
   }
-  return leerJSON(res);
+
+  const datos = await leerJSON(res);
+
+  // El proxy manda en `detalle` lo que le devolvió el Apps Script cuando no era
+  // JSON. Ese texto es la única pista de qué falló, y hasta ahora se tiraba: la
+  // app enseñaba «no devolvió JSON» y ahí se acababa el diagnóstico.
+  if (datos && datos.ok === false && datos.detalle) {
+    datos.error = (datos.error || 'Error del servidor') + ' · Respondió: ' + datos.detalle;
+  }
+
+  // Un corte de reloj del proxy es lo mismo que un servidor que no contesta: no
+  // es culpa de los datos, así que el repostaje puede irse a la cola offline.
+  if (datos && datos.seCorto) datos.sinRespuesta = true;
+
+  return datos;
 }
 
 /** Lectura. El sufijo `_` es anticaché: sin él Google puede servir datos viejos. */

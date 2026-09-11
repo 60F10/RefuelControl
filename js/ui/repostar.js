@@ -348,16 +348,23 @@ export function montarRepostar() {
     if (!navigator.onLine) return info('Sin conexión no se puede analizar. Usa «Meterlo a mano» y se subirá luego.', 'aviso');
 
     $('btnAnalizar').disabled = true;
+
+    // Dos llamadas seguidas con el mismo botón: sin saber en cuál se rompió, el
+    // mensaje de error no servía para nada. `paso` viaja hasta el catch.
+    let paso = 'subiendo la foto';
+    let avisoSubida = '';
+
     try {
       pedirUbicacion();
       if (!RECIBO) {
         info('Subiendo la foto a Drive...');
         const sub = await api({ action: 'subir', imagenBase64: fotoB64, mimeType: fotoMime });
         RECIBO = sub.ok ? { fileId: sub.fileId, url: sub.url } : null;
-        if (!sub.ok) info('⚠️ La foto no se guardó en Drive: ' + sub.error, 'aviso');
+        if (!sub.ok) avisoSubida = '⚠️ La foto no se guardó en Drive: ' + sub.error + '. ';
       }
 
-      info('Analizando el ticket con Gemini...');
+      paso = 'analizando el ticket';
+      info(avisoSubida + 'Analizando el ticket con Gemini...');
       const r = RECIBO
         ? await api({ action: 'analizar', fileId: RECIBO.fileId })
         : await api({ action: 'analizar', imagenBase64: fotoB64, mimeType: fotoMime });
@@ -366,10 +373,11 @@ export function montarRepostar() {
 
       ANALISIS = r;
       apuntarUbicaciones(r.ubicaciones);
-      info('Ticket analizado. Revisa los datos y guarda.', 'ok');
+      info(avisoSubida + 'Ticket analizado. Revisa los datos y guarda.', avisoSubida ? 'aviso' : 'ok');
       pintarRevision(r);
     } catch (err) {
-      info('❌ ' + err.message, 'aviso');
+      info('❌ Falló ' + paso + ': ' + err.message +
+           ' · Si se repite, usa «Meterlo a mano» y engancha el ticket desde el Historial.', 'aviso');
     } finally {
       $('btnAnalizar').disabled = false;
     }

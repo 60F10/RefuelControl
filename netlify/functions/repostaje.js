@@ -39,6 +39,26 @@ function mismoCodigo(a, b) {
 
 const esperar = ms => new Promise(ok => setTimeout(ok, ms));
 
+/**
+ * Netlify mata la función a los 10 s y lo que devuelve entonces no es nuestro
+ * JSON, así que la app se quedaba con un «no devolvió JSON» que no explicaba
+ * nada. Con un reloj propio un segundo por debajo, el corte lo damos nosotros y
+ * sale por la puerta buena, con un mensaje que dice qué pasó y cuánto tardó.
+ */
+const ESPERA_SCRIPT = 9000;
+
+async function pedirAlScript(url, opciones) {
+  const corta = new AbortController();
+  const reloj = setTimeout(() => corta.abort(), ESPERA_SCRIPT);
+  const arranque = Date.now();
+  try {
+    const r = await fetch(url, Object.assign({ signal: corta.signal }, opciones));
+    return { texto: await r.text(), status: r.status, ms: Date.now() - arranque };
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+
 exports.handler = async (event) => {
   if (!URL_SCRIPT || !TOKEN) {
     return respuesta(500, {
@@ -82,11 +102,11 @@ exports.handler = async (event) => {
       // caché, así que sin esto un borrado podía tardar en verse en la app.
       params.set('_', Date.now() + '-' + Math.random().toString(36).slice(2));
 
-      const r = await fetch(URL_SCRIPT + '?' + params.toString(), {
+      const r = await pedirAlScript(URL_SCRIPT + '?' + params.toString(), {
         redirect: 'follow',
         headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
       });
-      return devolver(await r.text());
+      return devolver(r, event.queryStringParameters.action || 'dashboard');
     }
 
     // ---------- Escritura ----------
@@ -94,31 +114,48 @@ exports.handler = async (event) => {
       const body = JSON.parse(event.body || '{}');
       body.token = TOKEN;
 
-      const r = await fetch(URL_SCRIPT, {
+      const r = await pedirAlScript(URL_SCRIPT, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },  // evita el preflight en Apps Script
         body: JSON.stringify(body),
         redirect: 'follow'
       });
-      return devolver(await r.text());
+      return devolver(r, body.action || 'POST');
     }
 
     return respuesta(405, { ok: false, error: 'Método no permitido' });
 
   } catch (err) {
+    if (err && err.name === 'AbortError') {
+      return respuesta(504, {
+        ok: false,
+        error: 'El Apps Script tardó más de ' + (ESPERA_SCRIPT / 1000) + ' s y se cortó la llamada. ' +
+               'Puede que siga trabajando por su cuenta: comprueba el resultado antes de repetir.',
+        seCorto: true
+      });
+    }
     return respuesta(502, { ok: false, error: 'Proxy: ' + err.message });
   }
 };
 
-/** Apps Script devuelve JSON, pero ante un error suyo devuelve HTML. Lo distinguimos. */
-function devolver(texto) {
+/**
+ * Apps Script devuelve JSON, pero ante un error suyo devuelve HTML: la página
+ * de inicio de sesión, un «se ha producido un error» o un aviso de cuota. Ese
+ * texto es justo lo que hace falta para saber qué pasa, así que viaja hasta la
+ * app en `detalle` en vez de quedarse aquí.
+ */
+function devolver(r, accion) {
   try {
-    return respuesta(200, JSON.parse(texto));
+    const datos = JSON.parse(r.texto);
+    datos.ms = r.ms;
+    return respuesta(200, datos);
   } catch (err) {
     return respuesta(502, {
       ok: false,
-      error: 'El Apps Script no devolvió JSON. ¿Publicaste una versión nueva de la implementación?',
-      detalle: texto.slice(0, 300)
+      error: 'El Apps Script no devolvió JSON en «' + accion + '» (HTTP ' + r.status +
+             ', ' + Math.round(r.ms / 1000) + ' s). ¿Publicaste una versión nueva de la implementación?',
+      detalle: r.texto.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300),
+      ms: r.ms
     });
   }
 }
